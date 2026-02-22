@@ -1,0 +1,153 @@
+#+title: Remote Skill References
+#+state: dropped
+#+FILETAGS: :remote:catalog:discovery:
+
+* Summary
+
+Define how skills.nix can reference, aggregate, and distribute skills from remote sources (GitHub repositories, other flakes, URLs). This enables the "awesome-list" catalog approach where skills.nix curates skills from various authors.
+
+* Motivation
+
+Not all skills will live in this repository. The ecosystem will grow with skills from different authors and repositories. skills.nix should be able to reference external skills, validate them, and include them in the catalog - similar to how Nix flakes can reference other flakes as inputs.
+
+** Goals
+
+- Reference skills from GitHub repositories
+- Validate remote skills against Agent Skills standard
+- Include remote skills in the Nix flake outputs
+- Maintain a curated catalog with descriptions and categories
+- Support pinning remote skills to specific commits/tags
+
+** Non-Goals
+
+- Running a skill registry/server
+- Automatic skill discovery from the internet
+- User-submitted skills without curation (v0.2+)
+- Skill dependency resolution between skills
+
+* Proposal
+
+** Catalog Structure
+
+A catalog file lists all skills, both local and remote:
+
+#+begin_src nix
+  # catalog.nix
+  {
+    # Local skills (in this repo)
+    local = {
+      air-workflow = {
+        src = ./skills/air-workflow;
+        description = "Air planning-first methodology";
+        tags = [ "planning" "workflow" ];
+      };
+      workmux = {
+        src = ./skills/workmux;
+        description = "Workmux parallel development workflows";
+        tags = [ "git" "workflow" "parallel" ];
+      };
+    };
+
+    # Remote skills (from other repos)
+    remote = {
+      kagi-search = {
+        repo = "github:anthropics/skills";
+        path = "kagi-search";  # Or however the source provides it
+        description = "Web search via Kagi API";
+        tags = [ "search" "web" ];
+      };
+    };
+  }
+#+end_src
+
+** Fetching Remote Skills
+
+Use Nix's built-in fetchers:
+
+#+begin_src nix
+  mkRemoteSkill = { repo, path ? "", rev ? null }:
+    let
+      src = builtins.fetchGit {
+        url = repo;
+        inherit rev;
+      };
+    in
+      mkSkill {
+        src = if path != "" then "${src}/${path}" else src;
+      };
+#+end_src
+
+** Flake Inputs for Remote Skills
+
+For skills in other flakes, use flake inputs:
+
+#+begin_src nix
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    # Remote skill sources
+    pi-skills.url = "github:badlogic/pi-skills";
+    anthropic-skills.url = "github:anthropics/skills";
+  };
+#+end_src
+
+** Catalog CLI (future)
+
+Eventually, users could browse the catalog:
+#+begin_example
+  # List available skills
+  nix flake show github:rytswd/skills.nix
+
+  # Search skills by tag
+  nix eval github:rytswd/skills.nix#catalog --apply 'c: builtins.filter (s: builtins.elem "search" s.tags) c'
+#+end_example
+
+* Design Details
+
+** Validation
+
+Remote skills should be validated:
+1. SKILL.md exists and has valid frontmatter
+2. Name follows Agent Skills convention
+3. No executable code that wasn't reviewed (security consideration)
+
+** Caching
+
+Nix handles caching via the flake lock file:
+- =flake.lock= pins all remote sources to specific revisions
+- =nix flake update= updates to latest versions
+- Individual inputs can be updated selectively
+
+** Test Plan
+
+- Fetch a remote skill and build it
+- Verify catalog listing is accurate
+- Test flake lock pinning and updates
+
+* Drawbacks
+
+- Remote skills may change or disappear
+- Security review burden for external code
+- Nix evaluation time increases with many remote inputs
+
+* Alternatives
+
+- Only include local skills, provide documentation for adding remote ones
+- Use git submodules instead of Nix fetchers
+- Create a separate index repository
+
+* Infrastructure Needed
+
+- GitHub Actions for CI/CD
+- Periodic validation of remote skill availability
+
+* History
+
+- 2026-02-21: Initial draft created, moved to ready state
+- 2026-02-21: Reverted to draft — Nix infrastructure migrating to numtide/blueprint, catalog and flake input patterns need rework
+- 2026-02-21: Dropped for v0.1 — no remote skills exist yet, catalog.nix pattern needs blueprint rework. Revisit in v0.2 when local skills are stable
+
+* References
+
+- [[https://nixos.wiki/wiki/Flakes][Nix Flakes - Inputs]]
+- [[https://agentskills.io/specification][Agent Skills Specification]]
+- [[./skill-installation-for-nix.org][Skill Installation for Nix]]

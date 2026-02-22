@@ -127,9 +127,18 @@ Default supported formats from air-config.toml:
 ## Metadata Conventions
 
 ### State Updates
-- Always update `#+state:` property when work status changes
-- Add entry to "Implementation History" section with date and description
+- **Always use `airctl update` to change state** — never edit `#+state:` manually
+- Add entry to "Implementation History" section with date and reason for change
 - Use ISO date format (YYYY-MM-DD) for consistency
+- When a change invalidates other docs, revert them to `draft` with a History entry
+
+```bash
+# Correct way to change state
+airctl update air/v0.1/feature.org --state work-in-progress --force
+
+# Wrong — don't do this
+# Manually editing #+state: in the file
+```
 
 ### Git Integration
 - Air is Git-aware but doesn't require Git

@@ -1,0 +1,352 @@
+#+TITLE: skills.nix
+#+AUTHOR: rytswd
+#+OPTIONS: toc:3 num:nil ^:nil
+
+#+html:<div align="center">
+#+html:<p>A Nix-packaged collection of agent skills following the <a href="https://agentskills.io/specification">Agent Skills standard</a></p>
+#+html:<p>
+#+html:<img src="https://img.shields.io/badge/Nix-flake-blue?style=flat-square&logo=nixos" alt="Nix Flake">
+#+html:<a href="https://github.com/rytswd/skills.nix"><img src="https://img.shields.io/badge/Source-grey?style=flat-square&logo=github" alt="GitHub Source"></a>
+#+html:<img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="MIT License">
+#+html:</p>
+#+html:</div>
+
+-----
+
+** 🌄 Overview
+
+*skills.nix* is a curated catalog of agent skills packaged with [[https://nixos.wiki/wiki/Flakes][Nix flakes]], providing one-command installation of skills for AI coding agents. Think of it as an "awesome-list" of agent skills with reproducible Nix integration.
+
+Every skill follows the [[https://agentskills.io/specification][Agent Skills standard]], making them compatible with [[https://github.com/badlogic/pi-mono][Pi]], [[https://docs.anthropic.com/en/docs/claude-code][Claude Code]], [[https://github.com/google-gemini/gemini-cli][Gemini CLI]], and other agents that support the standard.
+
+** ✨ Skills
+
+*** Local
+
+#+html:<details>
+#+html:<summary><strong>kagi-search</strong> — Web search &amp; summarization via <a href="https://kagi.com">Kagi</a> APIs</summary>
+#+html:<br>
+
+- *Compatibility*: Requires =KAGI_API_KEY=, =curl=, =jq=
+- *Invoke*: =/skill:kagi-search= (in Pi)
+- *Scripts*: =scripts/search.sh=, =scripts/summarize.sh=
+
+Search the web and summarize content using Kagi's APIs:
+- =search.sh "query" [limit]= — Search and format results
+- =summarize.sh <url-or-text> [engine] [type]= — Summarize any content
+
+Summarizer supports articles, PDFs, YouTube, audio, PowerPoint, Word docs.
+Three engines: =cecil= (fast), =agnes= (formal), =muriel= (best quality).
+Two output types: =summary= (prose) or =takeaway= (bullet points).
+
+#+html:</details>
+
+#+html:<details>
+#+html:<summary><strong>workmux-workflow</strong> — Orchestration patterns for parallel AI agents using <a href="https://github.com/raine/workmux">workmux</a></summary>
+#+html:<br>
+
+- *Compatibility*: Requires =workmux=, =git=, and =tmux=
+- *Invoke*: =/skill:workmux-workflow= (in Pi)
+
+Patterns for the orchestrator role when coordinating multiple AI agents:
+- Task decomposition with non-overlapping file scopes
+- Prompt template with file scope, context references, and commit instructions
+- Spawn → monitor → review → merge workflow
+- Anti-patterns: overlapping scopes, missing commit before merge, too many parallel agents
+
+#+html:</details>
+
+#+html:<details>
+#+html:<summary><strong>context7</strong> — Library documentation lookup via <a href="https://github.com/upstash/context7">Context7</a></summary>
+#+html:<br>
+
+- *Compatibility*: Requires =curl= and =jq=; optionally =npx= for MCP setup
+- *Invoke*: =/skill:context7= (in Pi)
+- *Scripts*: =scripts/query.sh=
+
+Look up current, version-specific library documentation:
+- =query.sh resolve "nextjs"= — Find a library's Context7 ID
+- =query.sh docs "/vercel/next.js" "app router"= — Query documentation
+- Also documents MCP server setup for native integration
+
+#+html:</details>
+
+*** Remote
+
+Remote skills are fetched from upstream repositories. Use =lib.mkRemoteSkills= to add skills from any git repo — see [[*Remote Skills][Remote Skills]].
+
+#+html:<details>
+#+html:<summary><strong>workmux</strong> — 5 upstream skills from <a href="https://github.com/raine/workmux">raine/workmux</a></summary>
+#+html:<br>
+
+- *Source*: [[https://github.com/raine/workmux/tree/main/skills][raine/workmux upstream]] (pinned to =v0.1.118=)
+- *Compatibility*: Requires =workmux=, =git=, and =tmux=
+- *Update*: =nix flake lock --override-input workmux-src github:raine/workmux/v<NEW>=
+
+Installs all 5 workmux skills directly from upstream:
+
+| Skill | Description | Invoke |
+|-------+-------------+--------|
+| =worktree= | Dispatch tasks to new git worktrees | =/skill:worktree= |
+| =coordinator= | Orchestrate multiple worktree agents | =/skill:coordinator= |
+| =merge= | Commit, rebase, and merge the current branch | =/skill:merge= |
+| =open-pr= | Write PR description and open in browser | =/skill:open-pr= |
+| =rebase= | Smart rebase with conflict resolution | =/skill:rebase= |
+
+#+html:</details>
+
+** 📦 Installation
+
+*** Prerequisites
+
+- [[https://nixos.org/download.html][Nix]] with flakes enabled
+- [[https://nix-community.github.io/home-manager/][Home Manager]] (for the recommended installation method)
+
+*** Home Manager (Recommended)
+
+Import the home-manager module and declare which skills you want for which agents:
+
+#+begin_src nix
+  # flake.nix
+  {
+    inputs = {
+      nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+      home-manager.url = "github:nix-community/home-manager";
+      skills-nix.url = "github:rytswd/skills.nix";
+    };
+  }
+#+end_src
+
+#+begin_src nix
+  # In your home-manager configuration:
+  { inputs, pkgs, ... }:
+  {
+    imports = [ inputs.skills-nix.homeModules.default ];
+
+    programs.agent-skills = {
+      enable = true;
+      skills = with inputs.skills-nix.packages.${pkgs.stdenv.hostPlatform.system}; [
+        kagi-search
+        context7
+        workmux
+      ];
+      pi.enable = true;       # → ~/.agents/skills/
+      claude.enable = true;   # → ~/.claude/skills/
+      gemini.enable = true;   # → ~/.agents/skills/
+    };
+  }
+#+end_src
+
+Skills are listed once in =skills=; agent targets are boolean flags. The module handles agent-specific layout differences automatically.
+
+See [[*➕ Adding Skills][Adding Skills]] for how to add remote, local, or new skills beyond what's included.
+
+*** Try Locally
+
+Build and inspect individual skills without installing:
+
+#+begin_src bash
+  nix build github:rytswd/skills.nix#kagi-search
+  find -L result/ -type f
+
+  nix build github:rytswd/skills.nix#context7
+  cat result/share/agent-skills/context7/SKILL.md
+#+end_src
+
+** 🔌 Agent Configuration
+
+The home-manager module places skills in the correct discovery directory for each agent:
+
+| Agent | =enable= flag | Directory | Discovery |
+|-------+---------------+-----------+-----------|
+| [[https://github.com/badlogic/pi-mono][Pi]] | =pi.enable = true= | =~/.agents/skills/= | Cross-agent convention, recursive |
+| [[https://github.com/openai/codex][Codex]] | =codex.enable = true= | =~/.agents/skills/= | Cross-agent convention, recursive |
+| [[https://docs.anthropic.com/en/docs/claude-code][Claude Code]] | =claude.enable = true= | =~/.claude/skills/= | Flat =<name>/SKILL.md= only |
+| [[https://github.com/google-gemini/gemini-cli][Gemini CLI]] | =gemini.enable = true= | =~/.agents/skills/= | Cross-agent convention, recursive |
+
+Skills are declared once — the module handles agent-specific layout differences automatically.
+
+*** Remote skill layout
+
+Remote skill sources (e.g., [[https://github.com/raine/workmux][workmux]]) bundle multiple skills under a single directory. Since Claude Code doesn't support recursive =SKILL.md= discovery, the module flattens them with a =__= separator:
+
+| Agent | Layout | Example |
+|-------+--------+---------|
+| Pi, Codex, Gemini | Nested | =workmux/coordinator/SKILL.md= |
+| Claude | Flattened | =workmux__coordinator/SKILL.md= |
+
+This applies to any remote skill integration — grouping by origin is automatic.
+
+** ➕ Adding Skills
+
+There are three ways to add skills to your setup: remote git sources, local filesystem paths, and contributing directly to this repo.
+
+*** Overview
+
+All skills follow the [[https://agentskills.io/specification][Agent Skills standard]] — a directory containing =SKILL.md= with YAML frontmatter (=name= and =description=), plus optional =scripts/=, =references/=, and =assets/= subdirectories.
+
+*** Remote Skills
+
+Use =lib.mkRemoteSkills= to pull skills from any git repo — no changes to skills.nix needed:
+
+#+begin_src nix
+  # flake.nix
+  {
+    inputs = {
+      skills-nix.url = "github:rytswd/skills.nix";
+      # Add any repo containing SKILL.md files:
+      cool-skills-src = {
+        url = "github:someone/cool-skills";
+        flake = false;
+      };
+    };
+  }
+#+end_src
+
+#+begin_src nix
+  # In your home-manager configuration:
+  { inputs, pkgs, ... }:
+  let
+    skills-nix = inputs.skills-nix;
+    system = pkgs.stdenv.hostPlatform.system;
+  in
+  {
+    imports = [ skills-nix.homeModules.default ];
+
+    programs.agent-skills = {
+      enable = true;
+      skills = [
+        # Built-in skills
+        skills-nix.packages.${system}.kagi-search
+
+        # Any remote repo with SKILL.md files
+        (skills-nix.lib.mkRemoteSkills {
+          inherit pkgs;
+          name = "cool-skills";       # Groups under cool-skills/<skill>/
+          src = inputs.cool-skills-src;
+          skillsDir = "skills";        # Subdirectory containing skills (optional)
+        })
+      ];
+      pi.enable = true;
+    };
+  }
+#+end_src
+
+=mkRemoteSkills= scans the source for =SKILL.md= files and packages them under =<name>/<skill>/=. Works with any git repo, tarball, or fetchurl source.
+
+*** Local Skills
+
+For private or unpublished skills that live on your local filesystem, use =localSkills=. These are symlinked directly (not copied into the Nix store), so changes take effect immediately without rebuilding:
+
+#+begin_src nix
+  { inputs, pkgs, ... }:
+  {
+    imports = [ inputs.skills-nix.homeModules.default ];
+
+    programs.agent-skills = {
+      enable = true;
+      skills = with inputs.skills-nix.packages.${pkgs.stdenv.hostPlatform.system}; [
+        kagi-search
+        context7
+      ];
+
+      # Local skills: name → absolute path to directory containing SKILL.md
+      localSkills = {
+        air-workflow = /home/user/my-skills/air-workflow;
+        my-private-skill = /home/user/my-skills/private;
+      };
+
+      pi.enable = true;
+    };
+  }
+#+end_src
+
+Each entry creates a symlink from the agent's skill directory (e.g., =~/.agents/skills/air-workflow=) directly to the local path. This is ideal for:
+- Skills based on unpublished tools
+- Personal workflow skills you don't want to share
+- Skills under active development
+
+*** In This Repo
+
+To contribute a new skill to the catalog:
+
+1. Create =skills/my-skill/SKILL.md= following the [[https://agentskills.io/specification][Agent Skills standard]]:
+
+#+begin_src markdown
+  ---
+  name: my-skill
+  description: What this skill does and when to use it.
+  ---
+
+  # My Skill
+
+  Instructions for the agent...
+#+end_src
+
+2. Create =nix/packages/my-skill/default.nix=:
+
+#+begin_src nix
+  { pkgs, ... }:
+
+  pkgs.runCommand "my-skill" { } ''
+    mkdir -p $out/share/agent-skills/my-skill
+    cp -r ${../../skills/my-skill}/* $out/share/agent-skills/my-skill/
+  ''
+#+end_src
+
+3. Build and test:
+
+#+begin_src bash
+  nix build .#my-skill
+  find -L result/ -type f
+#+end_src
+
+** 📁 Structure
+
+#+begin_example
+skills.nix/
+├── flake.nix                          # Nix flake (numtide/blueprint)
+│
+├── skills/                            # Skill content (SKILL.md + scripts)
+│   ├── kagi-search/
+│   │   ├── SKILL.md
+│   │   └── scripts/
+│   │       ├── search.sh
+│   │       └── summarize.sh
+│   ├── workmux-workflow/SKILL.md
+│   └── context7/
+│       ├── SKILL.md
+│       └── scripts/query.sh
+│
+├── nix/
+│   ├── lib/default.nix                # mkSkillsDir, mkRemoteSkills
+│   ├── modules/home/default.nix       # Home-Manager module
+│   └── packages/                       # Skill packages (one per skill)
+│       ├── kagi-search/default.nix
+│       ├── workmux-workflow/default.nix
+│       ├── context7/default.nix
+│       └── workmux/default.nix        # Remote (via mkRemoteSkills)
+│
+├── air/                               # Air planning documents
+├── AGENTS.md
+└── README.org
+#+end_example
+
+Each skill gets its own package directory. The home-manager module is the install interface — it reads agent configuration (paths, flatten behavior) and creates the right symlinks.
+
+** 🧪 Development
+
+#+begin_src bash
+  # Build a specific skill
+  nix build .#kagi-search
+
+  # Check flake
+  nix flake check
+
+  # Show available packages
+  nix flake show
+#+end_src
+
+** 📄 License
+
+MIT

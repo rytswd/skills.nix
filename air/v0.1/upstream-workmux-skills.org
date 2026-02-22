@@ -1,0 +1,133 @@
+#+title: Reference workmux skills from upstream repo
+#+state: complete
+#+FILETAGS: :workmux:upstream:nix:
+
+* Summary
+
+Replace the copied/consolidated workmux skill with a reference to the upstream =raine/workmux= repository. The Nix package should fetch workmux's 5 skills from the upstream repo, pinned to the installed workmux version tag.
+
+* Motivation
+
+The current =skills/workmux/SKILL.md= is a consolidated copy of workmux's 5 upstream skills. This creates maintenance burden and drifts from upstream as workmux evolves. Instead, we should reference the upstream source directly, pinned by version.
+
+** Goals
+
+- Add =workmux-src= flake input pinned to a version tag (=v0.1.118=)
+- Nix package fetches all 5 upstream skills (coordinator, merge, open-pr, rebase, worktree)
+- Remove copied =skills/workmux/SKILL.md=
+- Version pinning via =flake.lock= — update with =nix flake update workmux-src=
+
+** Non-Goals
+
+- Modifying upstream skills
+- Consolidating 5 skills into 1 (upstream structure is canonical)
+- Packaging workmux binary (users install that separately)
+
+* Proposal
+
+** Flake Input
+
+Add to =flake.nix=:
+
+#+begin_src nix
+  workmux-src = {
+    url = "github:raine/workmux/v0.1.118";
+    flake = false;  # Only need the source tree, not the flake outputs
+  };
+#+end_src
+
+** Package Definition
+
+=nix/packages/workmux/default.nix= — installs all 5 upstream skills:
+
+#+begin_src nix
+  { pkgs, inputs, pname, ... }:
+
+  pkgs.stdenvNoCC.mkDerivation {
+    name = "workmux-skills";
+    version = "0.1.118";  # Match upstream tag
+    src = "${inputs.workmux-src}/skills";
+
+    dontBuild = true;
+    dontConfigure = true;
+    dontFixup = true;
+
+    installPhase = ''
+      runHook preInstall
+      for skill in */; do
+        skill_name="''${skill%/}"
+        if [ -f "$skill_name/SKILL.md" ]; then
+          mkdir -p $out/share/agent-skills/$skill_name
+          cp -r "$skill_name"/. $out/share/agent-skills/$skill_name/
+        fi
+      done
+      runHook postInstall
+    '';
+
+    meta = {
+      description = "Workmux agent skills (from upstream raine/workmux)";
+      license = pkgs.lib.licenses.mit;
+      platforms = pkgs.lib.platforms.all;
+    };
+  }
+#+end_src
+
+** What Gets Installed
+
+The output will contain all 5 upstream skills:
+
+#+begin_example
+  $out/share/agent-skills/
+  ├── coordinator/SKILL.md
+  ├── merge/SKILL.md
+  ├── open-pr/SKILL.md
+  ├── rebase/SKILL.md
+  └── worktree/SKILL.md
+#+end_example
+
+** Updating to a New Workmux Version
+
+#+begin_src bash
+  # Update to latest workmux release
+  nix flake update workmux-src
+  # Or pin to a specific version
+  nix flake lock --override-input workmux-src github:raine/workmux/v0.1.120
+#+end_src
+
+* Design Details
+
+** Files to Change
+
+1. =flake.nix= — add =workmux-src= input
+2. =nix/packages/workmux/default.nix= — rewrite to use upstream source
+3. =nix/packages/all/default.nix= — no change needed (still references =workmux=)
+4. =skills/workmux/SKILL.md= — delete (no longer maintained locally)
+
+** Test Plan
+
+- =nix build .#workmux= — verify 5 skills in output
+- =nix build .#all= — verify meta-package still works
+- =nix flake check= — all checks pass
+- =find -L result/share/agent-skills/ -name SKILL.md= — verify 5 files
+
+* Drawbacks
+
+- Extra flake input adds to lock file
+- Upstream skills may change in breaking ways between versions
+- 5 separate skills instead of 1 consolidated one (more entries in agent's skill list)
+
+* Alternatives
+
+- Keep the consolidated copy and manually sync with upstream
+- Use =builtins.fetchGit= instead of flake input (less reproducible)
+- Only include a subset of workmux skills
+
+* History
+
+- 2026-02-21: Created, moved to ready state
+- 2026-02-21: Implementation complete — 5 upstream skills build, flake check passes
+
+* References
+
+- [[https://github.com/raine/workmux/tree/main/skills][Workmux upstream skills]]
+- [[../../research/FINDINGS.md][Research Findings — Section 1: Workmux Skills]]

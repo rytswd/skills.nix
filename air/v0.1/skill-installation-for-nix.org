@@ -1,0 +1,225 @@
+#+title: Skill Installation for Nix
+#+state: complete
+#+FILETAGS: :nix:packaging:infrastructure:
+
+* Summary
+
+Define the Nix flake structure using [[https://github.com/numtide/blueprint][numtide/blueprint]] to package Agent Skills standard-compliant skills as Nix derivations. Blueprint provides an opinionated folder-to-flake-output mapping that eliminates boilerplate.
+
+* Motivation
+
+Agent skills today are installed manually - cloning repos, copying files, configuring paths. Nix provides reproducible, declarative installation. By using blueprint's standard folder structure, we get clean separation between skill content (=skills/=) and Nix packaging (=nix/packages/=) with zero glue code in =flake.nix=.
+
+** Goals
+
+- Use numtide/blueprint with =prefix = "nix"= for all Nix packaging
+- Each skill as a separate package via =nix/packages/<name>/default.nix=
+- Meta =all= package that bundles every skill
+- Support installation into agent skill directories
+- Provide a flake that others can reference as an input
+- Clean =flake.nix= with no boilerplate
+
+** Non-Goals
+
+- Runtime dependency management (skills should be self-contained)
+- Custom CLI tool (use Nix tooling directly)
+- Home Manager module (v0.2)
+
+* Proposal
+
+** flake.nix
+
+Minimal flake using blueprint:
+
+#+begin_src nix
+  {
+    description = "skills.nix - A Nix-packaged collection of agent skills";
+
+    inputs = {
+      nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-unstable";
+      blueprint.url = "github:numtide/blueprint";
+      blueprint.inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    outputs = inputs: inputs.blueprint { inherit inputs; prefix = "nix"; };
+  }
+#+end_src
+
+** Directory Structure
+
+With =prefix = "nix"=, blueprint scans =nix/= for standard folders:
+
+#+begin_example
+  nix/
+  └── packages/
+      ├── air-workflow/
+      │   └── default.nix       # → packages.*.air-workflow
+      ├── workmux/
+      │   └── default.nix       # → packages.*.workmux
+      ├── kagi-search/
+      │   └── default.nix       # → packages.*.kagi-search
+      ├── context7/
+      │   └── default.nix       # → packages.*.context7
+      └── all/
+          └── default.nix       # → packages.*.all (meta-package)
+
+  skills/                        # Skill source (unchanged)
+      ├── air-workflow/
+      │   └── SKILL.md
+      ├── workmux/
+      │   └── SKILL.md
+      ├── kagi-search/
+      │   ├── SKILL.md
+      │   └── scripts/search.sh
+      └── context7/
+          ├── SKILL.md
+          └── scripts/query.sh
+#+end_example
+
+** Package Definition Pattern
+
+Each =nix/packages/<name>/default.nix= follows this pattern:
+
+#+begin_src nix
+  { pkgs, lib, pname, ... }:
+
+  pkgs.stdenvNoCC.mkDerivation {
+    inherit pname;
+    version = "0.1.0";
+
+    src = ../../../skills/air-workflow;  # Relative path to skill source
+
+    dontBuild = true;
+    dontConfigure = true;
+    dontFixup = true;
+
+    installPhase = ''
+      runHook preInstall
+
+      if [ ! -f SKILL.md ]; then
+        echo "ERROR: SKILL.md not found for '${pname}'"
+        exit 1
+      fi
+
+      mkdir -p $out/share/agent-skills/${pname}
+      cp -r . $out/share/agent-skills/${pname}/
+
+      runHook postInstall
+    '';
+
+    meta = {
+      description = "Agent skill: ${pname}";
+      license = lib.licenses.mit;
+      platforms = lib.platforms.all;
+    };
+  }
+#+end_src
+
+** Meta-Package (all)
+
+#+begin_src nix
+  { pkgs, perSystem, lib, ... }:
+
+  pkgs.symlinkJoin {
+    name = "agent-skills-all";
+    paths = with perSystem.self; [
+      air-workflow
+      workmux
+      kagi-search
+      context7
+    ];
+    meta = {
+      description = "All agent skills from skills.nix";
+      license = lib.licenses.mit;
+      platforms = lib.platforms.all;
+    };
+  }
+#+end_src
+
+** Installation Methods
+
+*** Add to system configuration (recommended)
+
+Similar to [[https://github.com/numtide/llm-agents.nix][numtide/llm-agents.nix]], add as a flake input:
+
+#+begin_src nix
+  {
+    inputs.skills-nix.url = "github:rytswd/skills.nix";
+
+    # In your NixOS / nix-darwin config:
+    environment.systemPackages = with inputs.skills-nix.packages.${pkgs.stdenv.hostPlatform.system}; [
+      air-workflow
+      workmux
+    ];
+  }
+#+end_src
+
+*** Per-project devShell (using blueprint)
+#+begin_src nix
+  # nix/devshells/default.nix
+  { pkgs, perSystem, ... }:
+  pkgs.mkShell {
+    packages = with perSystem.self; [
+      air-workflow
+      workmux
+    ];
+  }
+#+end_src
+
+* Design Details
+
+** Key Differences from Previous Approach
+
+| Aspect | Before (manual) | After (blueprint) |
+|--------+-----------------+-------------------|
+| flake.nix | ~50 lines, custom forAllSystems | ~10 lines, zero boilerplate |
+| Package discovery | Manual =skillDefs= attrset | Automatic from =nix/packages/= folders |
+| Builder | Custom =lib/mkSkill.nix= | Standard =default.nix= per package |
+| Checks | None | Auto-generated by blueprint |
+| Formatter | None | =nixfmt-tree= by default |
+
+** What blueprint provides automatically
+
+- =packages.*= from =nix/packages/=
+- =checks.*= from packages (build tests)
+- =formatter.*= (=nixfmt-tree=)
+- Multi-system support via =nix-systems=
+- =perSystem= for cross-referencing packages
+
+** Test Plan
+
+- =nix build .#air-workflow= — builds a single skill
+- =nix build .#all= — builds meta-package
+- =nix flake check= — blueprint auto-checks all packages
+- =nix flake show= — verify all outputs are correct
+- Verify =result/share/agent-skills/<name>/SKILL.md= exists in output
+
+* Drawbacks
+
+- Extra dependency on numtide/blueprint
+- Less explicit than hand-written flake (magic folder mapping)
+- Blueprint is marked "experimental" by numtide
+
+* Alternatives
+
+- Hand-written flake with =forAllSystems= (previous approach, more boilerplate)
+- flake-parts module system (more complex than needed)
+- flake-utils (predecessor to blueprint, less opinionated)
+
+* Infrastructure Needed
+
+- Nix with flakes enabled
+- GitHub repository for flake distribution
+
+* History
+
+- 2026-02-21: Initial draft created
+- 2026-02-21: Moved to ready state
+- 2026-02-21: Refactored to use numtide/blueprint, moved to work-in-progress
+- 2026-02-21: Blueprint migration complete — all packages build, flake check passes
+
+* References
+
+- [[https://github.com/numtide/blueprint][numtide/blueprint]]
+- [[https://numtide.github.io/blueprint/main/][Blueprint documentation]]
+- [[https://agentskills.io/specification][Agent Skills Specification]]

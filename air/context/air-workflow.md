@@ -28,8 +28,11 @@ Documents follow this typical progression through states:
 
 ```
 draft → ready → work-in-progress → complete
-   ↓                                  ↓
-dropped                           archive/
+  │       │              │             │
+  ├───────┴──────────────┘             │
+  │                                    │
+  ▼                                    ▼
+dropped                             archive/
 ```
 
 ### State Transitions
@@ -104,11 +107,10 @@ airctl update v0.1/feature-name.org --add-tag reviewed
 airctl update v0.1/feature-name.org --remove-tag draft-only
 ```
 
-#### Manual Updates
-You can also manually edit document headers if preferred:
-- Update `#+state:` property in document
-- Add entry to Implementation History section with date and description
-- Use ISO date format (YYYY-MM-DD) for consistency
+#### Important: Always Use airctl update
+**Never edit `#+state:` manually** — always use `airctl update` for state changes.
+This ensures consistent formatting and enables future tooling hooks.
+After changing state, always add a History entry with date and reason.
 
 #### During Execution
 - Document any design changes that deviate from original spec

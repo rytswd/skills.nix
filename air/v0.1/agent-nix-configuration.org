@@ -1,0 +1,306 @@
+#+title: Nix-managed agent skill configuration
+#+state: complete
+#+FILETAGS: :nix:agents:configuration:
+
+* Summary
+
+Create a home-manager module and supporting Nix infrastructure so users can declaratively configure agent skills with a clean API. Skills are listed once; agent targets are enabled with boolean flags.
+
+* Motivation
+
+The v1 approach (=mkSkillsFor= with =inherit pkgs; agent = "pi"; skills = with inputs.skills-nix.packages.${pkgs.stdenv.hostPlatform.system}; [...]..=) is verbose and confusing. Skills aren't really "packages" in the user-facing sense — they're content that agents discover. The API should reflect this.
+
+Users should write:
+
+#+begin_src nix
+  programs.agent-skills = {
+    enable = true;
+    skills = with inputs.skills-nix.packages.${pkgs.stdenv.hostPlatform.system}; [
+      air-workflow
+      workmux
+      kagi-search
+    ];
+    pi.enable = true;       # → ~/.agents/skills/
+    claude.enable = true;   # → ~/.claude/skills/
+  };
+#+end_src
+
+** Goals
+
+- Home-manager module as the primary installation interface
+- =skills= field takes a list of skill derivations
+- Agent targets as boolean flags: =pi.enable=, =claude.enable=, =gemini.enable=
+- Each agent writes to the correct discovery directory
+- Local testing without home-manager via =nix build .#pi-skills=
+- Co-exist with user-created skills (don't overwrite entire dirs)
+
+** Non-Goals
+
+- NixOS system-level module (future — agents run as user)
+- Packaging agent binaries (that's llm-agents.nix)
+- Auto-detecting which agents are installed
+
+* Agent Skill Directories (Research)
+
+** Pi (from Pi skills docs)
+
+Loads from (in order):
+- =~/.pi/agent/skills/= (global)
+- =~/.agents/skills/= (global, cross-agent convention)
+- =.pi/skills/= (project)
+- =.agents/skills/= (project, walks up to git root)
+- =skills= array in settings.json
+- =--skill <path>= CLI flag
+
+Best target: =~/.agents/skills/= — portable, works with Pi + any agent adopting the convention.
+
+** Claude Code (from Anthropic docs)
+
+Loads from:
+- =~/.claude/skills/<name>/SKILL.md= (personal)
+- =.claude/skills/<name>/SKILL.md= (project)
+- Plugin skills directories
+- Enterprise managed settings
+
+Best target: =~/.claude/skills/=
+
+** Gemini CLI (from Gemini CLI docs)
+
+Loads skills from extensions only:
+- =<extension-dir>/skills/<name>/SKILL.md=
+- Requires =gemini-extension.json= manifest in extension root
+- Extensions installed via =gemini extensions install= or =gemini extensions link=
+
+Best target: =~/.gemini/extensions/skills-nix/= with a =gemini-extension.json= manifest.
+
+* Proposal
+
+** Architecture
+
+#+begin_example
+  ┌─────────────────────────────────┐
+  │   Home-Manager Module           │
+  │   programs.agent-skills         │
+  │     skills = [ ... ]            │
+  │     pi.enable = true            │
+  │     claude.enable = true        │
+  ├─────────────────────────────────┤
+  │   Internal: mkSkillsDir         │
+  │   Builds flat skill directory   │
+  │   from list of derivations      │
+  ├─────────────────────────────────┤
+  │   home.file symlinks            │
+  │   ~/.agents/skills/* (Pi)       │
+  │   ~/.claude/skills/* (Claude)   │
+  │   ~/.gemini/extensions/...      │
+  └─────────────────────────────────┘
+#+end_example
+
+** Home-Manager Module: =nix/modules/home/default.nix=
+
+Blueprint auto-exposes =nix/modules/home/*.nix= as =homeModules.*=.
+
+#+begin_src nix
+  { flake, inputs, ... }:
+  { config, lib, pkgs, ... }:
+  let
+    cfg = config.programs.agent-skills;
+
+    # Build a flat directory of skill subdirs from a list of skill derivations
+    mkSkillsDir = skills:
+      pkgs.runCommand "agent-skills-combined" { } ''
+        mkdir -p $out
+        ${lib.concatMapStringsSep "\n" (skill: ''
+          for skill_dir in ${skill}/share/agent-skills/*/; do
+            skill_name="$(basename "$skill_dir")"
+            ln -s "$skill_dir" "$out/$skill_name"
+          done
+        '') skills}
+      '';
+
+    skillsDir = mkSkillsDir cfg.skills;
+  in
+  {
+    options.programs.agent-skills = {
+      enable = lib.mkEnableOption "agent skills from skills.nix";
+
+      skills = lib.mkOption {
+        type = lib.types.listOf lib.types.package;
+        default = [ ];
+        description = "List of skill derivations to install.";
+        example = lib.literalExpression ''
+          with inputs.skills-nix.packages.''${pkgs.stdenv.hostPlatform.system}; [
+            air-workflow
+            workmux
+            kagi-search
+          ]
+        '';
+      };
+
+      pi = {
+        enable = lib.mkEnableOption "Pi agent skills at ~/.agents/skills/";
+      };
+
+      claude = {
+        enable = lib.mkEnableOption "Claude Code skills at ~/.claude/skills/";
+      };
+
+      gemini = {
+        enable = lib.mkEnableOption "Gemini CLI skills extension";
+      };
+    };
+
+    config = lib.mkIf cfg.enable {
+      home.file = lib.mkMerge [
+        # Pi: ~/.agents/skills/<name> → skill dir
+        (lib.mkIf cfg.pi.enable {
+          ".agents/skills" = {
+            source = skillsDir;
+            recursive = true;
+          };
+        })
+
+        # Claude Code: ~/.claude/skills/<name> → skill dir
+        (lib.mkIf cfg.claude.enable {
+          ".claude/skills" = {
+            source = skillsDir;
+            recursive = true;
+          };
+        })
+
+        # Gemini CLI: ~/.gemini/extensions/skills-nix/ with manifest
+        (lib.mkIf cfg.gemini.enable {
+          ".gemini/extensions/skills-nix/skills" = {
+            source = skillsDir;
+            recursive = true;
+          };
+          ".gemini/extensions/skills-nix/gemini-extension.json".text =
+            builtins.toJSON {
+              name = "skills-nix";
+              version = "0.1.0";
+              description = "Agent skills managed by skills.nix";
+            };
+        })
+      ];
+    };
+  }
+#+end_src
+
+** Per-Agent Packages (Local Testing)
+
+Keep =pi-skills=, =claude-skills=, =gemini-skills= packages that produce a flat skill directory for local testing:
+
+#+begin_src bash
+  # Test pi skills without home-manager
+  nix build github:rytswd/skills.nix#pi-skills
+  ls result/
+  # air-workflow/  coordinator/  kagi-search/  ...
+
+  # Manually link if desired
+  ln -sf $(realpath result)/* ~/.agents/skills/
+#+end_src
+
+These use a simplified =mkSkillsDir= in lib:
+
+#+begin_src nix
+  # nix/lib/default.nix
+  { inputs, flake, ... }:
+  {
+    mkSkillsDir =
+      { pkgs
+      , skills ? [ ]
+      }:
+      pkgs.runCommand "agent-skills" { } ''
+        mkdir -p $out
+        ${pkgs.lib.concatMapStringsSep "\n" (skill: ''
+          for skill_dir in ${skill}/share/agent-skills/*/; do
+            skill_name="$(basename "$skill_dir")"
+            ln -s "$skill_dir" "$out/$skill_name"
+          done
+        '') skills}
+      '';
+  }
+#+end_src
+
+Per-agent packages are then just =mkSkillsDir= with all skills:
+
+#+begin_src nix
+  # nix/packages/pi-skills/default.nix
+  { pkgs, perSystem, flake, ... }:
+
+  flake.lib.mkSkillsDir {
+    inherit pkgs;
+    skills = with perSystem.self; [
+      air-workflow workmux kagi-search context7
+    ];
+  }
+#+end_src
+
+** User-Facing Usage
+
+*** Home-Manager (recommended)
+
+#+begin_src nix
+  # flake.nix
+  {
+    inputs.skills-nix.url = "github:rytswd/skills.nix";
+
+    # In your home-manager config:
+    imports = [ inputs.skills-nix.homeModules.default ];
+
+    programs.agent-skills = {
+      enable = true;
+      skills = with inputs.skills-nix.packages.''${pkgs.stdenv.hostPlatform.system}; [
+        air-workflow
+        workmux
+        kagi-search
+        context7
+      ];
+      pi.enable = true;
+      claude.enable = true;
+    };
+  }
+#+end_src
+
+*** Local Testing (no home-manager)
+
+#+begin_src bash
+  # Build flat skill directory for any agent
+  nix build github:rytswd/skills.nix#pi-skills
+  ls result/
+  # air-workflow/  coordinator/  kagi-search/  ...
+
+  # Inspect a skill
+  cat result/air-workflow/SKILL.md
+#+end_src
+
+* Design Details
+
+** Files to Create/Modify
+
+1. =nix/modules/home/default.nix= — Home-Manager module (new)
+2. =nix/lib/default.nix= — simplify to =mkSkillsDir= (modify)
+3. =nix/packages/pi-skills/default.nix= — use =mkSkillsDir=, flat output (modify)
+4. =nix/packages/claude-skills/default.nix= — use =mkSkillsDir=, flat output (modify)
+5. =nix/packages/gemini-skills/default.nix= — use =mkSkillsDir=, flat output (modify)
+6. =README.org= — rewrite with HM module as primary interface
+
+** Test Plan
+
+- =nix build .#pi-skills= → flat dir with =*/SKILL.md=
+- =nix flake check= passes
+- Home-Manager module: test in a NixOS VM or verify options parse
+
+* History
+
+- 2026-02-21: Created with mkSkillsFor design
+- 2026-02-21: Fixed agent directories from documentation research
+- 2026-02-21: Redesigned: home-manager module as primary interface, mkSkillsDir replaces mkSkillsFor
+
+* References
+
+- [[https://github.com/numtide/llm-agents.nix][numtide/llm-agents.nix]] — installation pattern reference
+- [[https://github.com/badlogic/pi-mono][Pi]] — skill discovery: =~/.agents/skills/=, =~/.pi/agent/skills/=
+- [[https://docs.anthropic.com/en/docs/claude-code/skills][Claude Code Skills]] — =~/.claude/skills/<name>/SKILL.md=
+- [[https://github.com/google-gemini/gemini-cli][Gemini CLI]] — extension-based with =gemini-extension.json=
+- [[../../research/FINDINGS.md][Research Findings]]

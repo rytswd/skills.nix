@@ -1,0 +1,156 @@
+#+title: Handle Installation Target Agents with Extra Flags
+#+state: complete
+#+FILETAGS: :agents:installation:multi-platform:
+
+* Summary
+
+Define how skills are installed into different agent platforms (Pi, Claude Code, OpenCode, Gemini, Codex) with agent-specific configuration. Each agent has different skill directory conventions and configuration mechanisms.
+
+* Motivation
+
+The Agent Skills standard is agent-agnostic, but each agent discovers skills differently. To make skills.nix truly useful, we need to handle the installation target correctly for each agent. Users should be able to choose which agent(s) to install skills for.
+
+** Goals
+
+- Document how each target agent discovers and loads skills
+- Provide installation instructions per agent in README.org
+- Handle agent-specific configuration (settings files, directories)
+- Prioritize: Pi > Claude Code > OpenCode > Gemini > Codex
+
+** Non-Goals
+
+- Modifying agent source code
+- Creating agent plugins/extensions (this is about skills only)
+- Auto-detecting which agents are installed (keep it explicit)
+- Per-agent Nix wrapper packages (deferred to v0.2)
+
+* Proposal
+
+** Agent Skill Discovery Matrix
+
+Based on research findings (=research/FINDINGS.md=):
+
+| Agent | Skills Standard | Skill Location | Config File | Discovery Method |
+|-------+----------------+---------------+-----------+----------------|
+| Pi | ✅ Full | =~/.pi/agent/skills/=, =.pi/skills/=, =~/.agents/skills/= | =settings.json= | Auto-discover SKILL.md in dirs |
+| Claude Code | ✅ Full + extensions | =~/.claude/skills/=, =.claude/skills/= | =settings.json= | Directory-based |
+| Gemini CLI | ✅ Via extensions | Extension =skills/= dirs | =gemini-extension.json= | Extension system |
+| OpenCode | ❌ No skills | =.opencode/commands/*.md= | =.opencode.json= | Custom commands only |
+| Codex | ❌ No skills | N/A | =~/.codex/= | =AGENTS.md= instructions only |
+
+** Installation Instructions Per Agent
+
+*** Pi (primary target)
+
+Skills.nix installs to =$out/share/agent-skills/<name>/=. Add as a flake input (similar to [[https://github.com/numtide/llm-agents.nix][numtide/llm-agents.nix]]):
+
+#+begin_src nix
+  {
+    inputs.skills-nix.url = "github:rytswd/skills.nix";
+
+    environment.systemPackages = with inputs.skills-nix.packages.${pkgs.stdenv.hostPlatform.system}; [
+      air-workflow
+      workmux
+    ];
+  }
+#+end_src
+
+Then configure Pi to find the skills via store paths in =~/.pi/agent/settings.json=.
+
+Pi also supports cross-agent paths: =~/.agents/skills/=.
+
+*** Claude Code
+
+Symlink skill store paths into Claude Code's directory:
+
+#+begin_src bash
+  mkdir -p ~/.claude/skills
+  # After nix build .#air-workflow
+  ln -sf ./result/share/agent-skills/air-workflow ~/.claude/skills/
+#+end_src
+
+Claude Code extensions beyond standard: =context: fork=, =agent= field, =argument-hint=, =disable-model-invocation=, =allowed-tools=.
+
+*** Gemini CLI
+
+Gemini CLI discovers skills via extensions. Requires a =gemini-extension.json= wrapper:
+
+#+begin_src json
+  {
+    "name": "skills-nix",
+    "version": "0.1.0",
+    "description": "Agent skills from skills.nix"
+  }
+#+end_src
+
+Skills placed in =skills/= subdirectory of the extension.
+
+*** OpenCode (no Agent Skills support)
+
+OpenCode uses custom commands instead. Skills could be converted to =.opencode/commands/*.md= format, but this is out of scope for v0.1.
+
+MCP integration is available: configure MCP servers in =.opencode.json= under =mcpServers=.
+
+*** Codex (no Agent Skills support)
+
+Codex has no skills or plugin system. Uses =AGENTS.md= for instructions only. Skills could be referenced as instruction documents but cannot be invoked as skills.
+
+** v0.1 Implementation Scope
+
+For v0.1, the approach is *documentation-based*:
+- README.org includes installation instructions for Pi, Claude Code, Gemini CLI, and others
+- Each section uses collapsible =<details>= for clean presentation
+- No per-agent Nix wrapper packages yet (deferred to v0.2)
+
+** Nix Integration (v0.2 — deferred)
+
+With blueprint's =nix/packages/= convention, per-agent packages could be added later:
+
+#+begin_src nix
+  # nix/packages/pi-all/default.nix — Pi-specific bundle (v0.2)
+  { pkgs, perSystem, ... }:
+  pkgs.runCommand "pi-skills-setup" {} ''
+    mkdir -p $out/share/pi-agent-skills
+    for skill in ${perSystem.self.all}/share/agent-skills/*; do
+      ln -s "$skill" $out/share/pi-agent-skills/
+    done
+  '';
+#+end_src
+
+* Design Details
+
+** Test Plan
+
+- Verify Pi skill installation via =settings.json= =skills= array
+- Verify Claude Code symlink approach discovers skills
+- Document manual verification steps in README.org
+
+* Drawbacks
+
+- Maintenance burden grows with each agent supported
+- Agent skill APIs may change without notice
+- OpenCode and Codex don't support the Agent Skills standard at all
+
+* Alternatives
+
+- Only support Pi and let users manually configure other agents
+- Create a universal installer script instead of Nix-native approach
+- Wait for agents to converge on a standard installation mechanism
+
+* Infrastructure Needed
+
+None for v0.1 (documentation-only approach).
+
+* History
+
+- 2026-02-21: Initial draft created, moved to ready state
+- 2026-02-21: Reverted to draft — Nix infrastructure migrating to numtide/blueprint
+- 2026-02-21: Updated with research findings, filled agent discovery matrix, scoped v0.1 to documentation approach
+- 2026-02-21: Marked complete — v0.1 scope (documentation + README) is done. Per-agent Nix wrappers deferred to v0.2
+
+* References
+
+- [[../../research/FINDINGS.md][Research Findings — Section 4: Agent Skill Directories]]
+- Pi skills documentation
+- [[https://agentskills.io/specification][Agent Skills Specification]]
+- [[./skill-installation-for-nix.org][Skill Installation for Nix]]

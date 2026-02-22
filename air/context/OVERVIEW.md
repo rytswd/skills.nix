@@ -1,60 +1,71 @@
 # Project Overview
 
 ## Description
-<!-- TODO: Replace with your project description -->
-This project uses Air for planning-first workflow, where planning documents serve as the single source of truth for requirements and specifications.
+
+**skills.nix** is a Nix-packaged collection of agent skills following the [Agent Skills standard](https://agentskills.io/specification), along with the infrastructure to package and distribute any skill via Nix. Think of it as an "awesome-list" of agent skills with one-command Nix installation.
 
 ## Core Principles
-<!-- Customize these principles based on your project's philosophy -->
-- Planning-first methodology
-- Clear specification before execution
-- Trackable progress through document states
-- Version-aware planning with milestone directories
+
+- **Nix-first distribution** - All skills installable via Nix flake, with reproducible builds
+- **Multi-agent support** - Skills target Pi, Claude Code, OpenCode, Gemini, and Codex
+- **Agent Skills standard** - Every skill follows the agentskills.io specification
+- **Catalog approach** - Curated collection of useful skills, easy to discover and install
+- **Planning-first methodology** - [Air](https://github.com/withre/air) documents drive all design and implementation
 
 ## Technology Stack
-<!-- TODO: Update with your project's technology stack -->
-<!-- Example sections to consider:
-- **Language**: [Your primary language]
-- **Framework**: [Your framework choice]
-- **Database**: [If applicable]
-- **Testing**: [Testing framework]
-- **Build System**: [Build tools]
--->
+
+- **Package Manager**: Nix (flakes)
+- **Skill Format**: Agent Skills standard (SKILL.md + optional scripts/references/assets)
+- **Target Agents**: Pi, Claude Code, OpenCode, Gemini CLI, Codex
+- **Planning**: [Air](https://github.com/withre/air) planning-first workflow
+- **Languages**: Nix (packaging), Bash/TypeScript/Python (skill scripts)
 
 ## Project Structure
-<!-- Air directory structure (managed by Air) -->
-- Main documentation: `./air/`
-- Templates: `./air/templates/`
-- Archived documents: `./air/archive/`
-- Context files: `./air/context/`
-- Version milestones: `./air/v0.1/`, `./air/v0.2/`, etc.
 
-<!-- TODO: Add your source code structure -->
-<!-- Example:
-- Source code: `./src/`
-- Tests: `./tests/`
-- Documentation: `./docs/`
--->
+```
+skills.nix/
+├── flake.nix              # Nix flake - main entry point
+├── lib/
+│   └── mkSkill.nix        # Skill builder function
+├── skills/                # Individual skills
+│   ├── air-workflow/
+│   │   └── SKILL.md
+│   ├── workmux/
+│   │   └── SKILL.md
+│   ├── kagi-search/
+│   │   ├── SKILL.md
+│   │   └── scripts/
+│   └── context7/
+│       ├── SKILL.md
+│       └── scripts/
+├── air/                   # Air planning documents
+│   ├── v0.1/              # Current milestone
+│   └── context/           # Generated context files
+├── AGENTS.md              # Agent context
+└── README.org             # Project documentation
+```
 
-## Architecture
-<!-- TODO: Describe your project's architecture -->
-<!-- Consider including:
-- High-level components
-- Key modules/packages
-- External dependencies
-- Integration points
--->
+## v0.1 Skills Catalog
 
-## Core Components
+| Skill | Description | Status |
+|-------|-------------|--------|
+| air-workflow | Air planning-first methodology | Draft |
+| workmux | Workmux parallel development workflows | Draft |
+| kagi-search | Web search via Kagi API | Draft |
+| context7 | Context7 library documentation lookup | Draft |
 
-<!-- TODO: List and describe your project's main components -->
-<!-- Example format:
-### Component Name
-Brief description of what this component does and its responsibilities.
--->
+## Target Agent Priority
+
+1. **Pi** - Primary target, native Agent Skills support
+2. **Claude Code** - `.claude/skills/` directory
+3. **OpenCode** - OpenCode skill configuration
+4. **Gemini CLI** - Gemini skill setup
+5. **Codex** - Codex skill integration
+
+Each agent is handled separately due to different configuration mechanisms.
 
 ## Document States (Air Workflow)
-Air uses these predefined states to track document lifecycle:
+
 - `draft` - Initial planning phase
 - `ready` - Specification complete, ready for execution
 - `work-in-progress` - Currently being executed
@@ -62,12 +73,6 @@ Air uses these predefined states to track document lifecycle:
 - `dropped` - No longer needed
 - `unknown` - State cannot be determined
 
-## Getting Started
-<!-- TODO: Customize for your project -->
-1. Review current status: `airctl status`
-2. Check ready work: `airctl status --state ready`
-3. Read relevant Air documents in `./air/` before executing
-4. Update document states as work progresses
-
 ## Current Focus
-Use `airctl status --state work-in-progress,ready` to see current priorities and available work.
+
+Use `airctl status --state work-in-progress,ready` to see current priorities.
