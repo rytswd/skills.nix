@@ -45,22 +45,37 @@ git add -A && git commit -m "docs: update plan before spawning agents"
 
 ### 3. Spawn Independent Agents
 
+For short prompts, use inline `--prompt`:
+
 ```bash
-workmux add agent-a --background --prompt "
+workmux add agent-a --background --prompt "Implement X. Only modify nix/packages/. Commit when done."
+```
+
+For complex tasks, write prompts to files and use `--prompt-file`:
+
+```bash
+cat > /tmp/prompts/agent-a.md << 'EOF'
 You are implementing X.
 
-## Context
-Read ./path/to/spec.md for full requirements.
+## Context — Read FIRST
+- ./path/to/spec.md
 
 ## File Scope
 ONLY modify files in: nix/packages/
 Do NOT touch: skills/, README.org, flake.nix
 
 ## When Done
-git add -A && git commit -m 'feat: description of work'
-"
+git add -A && git commit -m 'description of work'
+EOF
 
-workmux add agent-b --background --prompt "..."
+workmux add agent-a --background --prompt-file /tmp/prompts/agent-a.md
+workmux add agent-b --background --prompt-file /tmp/prompts/agent-b.md
+```
+
+Use `--base <branch>` when the current branch can't be auto-detected (e.g., detached HEAD, non-standard VCS setup):
+
+```bash
+workmux add agent-a --base main --background --prompt-file /tmp/prompts/agent-a.md
 ```
 
 **Prompt checklist**:
@@ -95,13 +110,42 @@ Review each agent's work before merging:
 cd $(workmux path agent-a) && git diff HEAD~1
 
 # If agent didn't commit, do it for them
-cd $(workmux path agent-a) && git add -A && git commit -m "feat: ..."
+cd $(workmux path agent-a) && git add -A && git commit -m "description of work"
 
 # Merge into main (must be on main with clean working tree)
 workmux merge agent-a
 ```
 
-Merge one at a time. After each merge, main has the new changes available for the next merge.
+Merge one at a time. **Run the full test suite after each merge** — cross-file issues only surface at merge time since agents work in isolation:
+
+```bash
+workmux merge agent-a
+# Run project-specific integration checks before merging the next agent
+```
+
+If something breaks after a merge, fix it before merging the next agent.
+
+#### When agents fail to commit
+
+Agents in worktrees can hit git issues (detached HEAD, config problems). If an agent completed work but didn't commit:
+
+```bash
+# Check what changed
+cd $(workmux path agent-a) && git status && git diff
+
+# Commit for them
+git add -A && git commit -m "description of work"
+```
+
+If the worktree is too broken for git operations, copy changed files manually:
+
+```bash
+# Find what changed
+diff -rq $(workmux path agent-a)/src ./src --exclude=target
+
+# Copy specific files back
+cp $(workmux path agent-a)/src/module.rs ./src/module.rs
+```
 
 ### 6. Spawn Dependent Agents
 
@@ -148,9 +192,9 @@ Do NOT touch: flake.nix, skills/, README.org
 
 `workmux merge` requires a clean main branch. If you have uncommitted changes, commit them first.
 
-### ❌ Too Many Parallel Agents
+### ❌ Skipping Integration Tests Between Merges
 
-More than 3–4 parallel agents becomes hard to monitor. Each needs review, possible manual commits, and sequential merging.
+Each agent tests in isolation — they can't see each other's changes. Only the orchestrator can catch cross-file issues. Run the full test suite after every merge, not just at the end.
 
 ### ❌ Large Tasks Without Checkpoints
 
@@ -158,30 +202,43 @@ If an agent runs 10+ minutes with no output, you can't tell if it's stuck. Break
 
 ## Prompt Template
 
-```
-You are implementing [TASK DESCRIPTION].
+```markdown
+You are working on [PROJECT DESCRIPTION].
 
 ## Context — Read FIRST
 - ./path/to/spec (the design specification)
 - ./path/to/reference (relevant existing code)
 
-## Tasks
-1. [Specific deliverable]
-2. [Specific deliverable]
-3. Test: [exact commands to run]
+## Task
+[Specific task description]
+
+## What to Fix / Implement
+1. [Concrete item with examples]
+2. [Concrete item with examples]
+
+## What NOT to Do
+- Do NOT modify files outside your scope
+- Do NOT add features or refactor beyond what's asked
+- Do NOT change public API signatures unless specifically required
 
 ## File Scope
 ONLY create/modify files in: [paths]
 Do NOT modify: [paths]
 
-## Commit
-git add -A && git commit -m '[type]: [description]'
+## Verification
+[Exact commands to run — build, test, lint]
+
+## When Done
+git add -A && git commit -m 'description of work'
 ```
 
 ## Tips
 
+- **Use `--prompt-file` for real tasks** — inline `--prompt` is fine for one-liners, but anything with file lists, specific examples, or multi-step instructions belongs in a file
 - **Use `$(workmux path <name>)`** to reference files in a worktree from the orchestrator
 - **Include test commands** in prompts — agents that verify their own work produce better results
-- **Commit orchestrator state before spawning** — Air doc updates, plan notes, etc.
+- **Commit orchestrator state before spawning** — plan notes, prompt files, etc.
 - **Review diffs before merging** — `cd $(workmux path agent) && git diff HEAD~1`
 - **Sequential dependencies are fine** — not everything needs to be parallel; the value is parallelizing what can be parallelized
+- **Agent commits are throwaway** — the orchestrator makes the final commit(s) with proper credentials, signing, and message style. Agent commits just need to exist so `workmux merge` can pick them up
+- **If an agent's work needs correction** — either fix it manually in the worktree before merging, or reject and re-spawn
