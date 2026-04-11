@@ -39,6 +39,73 @@
       '') skills}
     '';
 
+  # Build a team-play skill package with optional extra role directories merged in.
+  # The base team-play provides engineer/, reviewer/, security/, ux-designer/,
+  # and orchestrator/ roles. Users can add their own roles (or extend existing
+  # categories) by providing extra directories.
+  #
+  # Usage:
+  #   skills-nix.lib.mkTeamPlay {
+  #     inherit pkgs;
+  #     extraRoles = [
+  #       ./my-roles       # my-roles/engineer/python.md, my-roles/dba/postgres.md
+  #     ];
+  #   }
+  #
+  # Or with a flake input:
+  #   skills-nix.lib.mkTeamPlay {
+  #     inherit pkgs;
+  #     extraRoles = [
+  #       ./my-roles
+  #       inputs.company-roles   # from another flake
+  #     ];
+  #   }
+  #
+  # Each entry in extraRoles is a directory whose contents are merged into
+  # the team-play tree. Files at the same path override the base (user wins).
+  # New directories are added alongside the built-in ones.
+  #
+  # Produces: $out/share/agent-skills/team-play/
+  mkTeamPlay =
+    { pkgs
+    , extraRoles ? [ ]   # List of paths/derivations containing role directories
+    , basePackage ? null  # Override the base team-play package (advanced)
+    }:
+    let
+      base =
+        if basePackage != null
+        then basePackage
+        else
+          (import ../../nix/packages/team-play/default.nix {
+            inherit pkgs;
+            pname = "team-play";
+          });
+      basePath = "${base}/share/agent-skills/team-play";
+    in
+    if extraRoles == [ ] then base
+    else
+      pkgs.runCommand "team-play" { } ''
+        mkdir -p $out/share/agent-skills/team-play
+
+        # Copy base team-play (writable so extras can overlay)
+        cp -r --no-preserve=mode ${basePath}/. $out/share/agent-skills/team-play/
+
+        # Merge each extra roles directory on top (user files win)
+        ${pkgs.lib.concatMapStringsSep "\n" (extra: ''
+          if [ -d "${extra}" ]; then
+            cp -r --no-preserve=mode "${extra}"/. $out/share/agent-skills/team-play/
+          else
+            echo "Warning: extraRoles entry '${extra}' is not a directory" >&2
+          fi
+        '') extraRoles}
+
+        # Ensure SKILL.md still exists after merge
+        if [ ! -f $out/share/agent-skills/team-play/SKILL.md ]; then
+          echo "ERROR: SKILL.md missing after merge — an extraRoles entry may have overwritten it" >&2
+          exit 1
+        fi
+      '';
+
   # Package skills from any remote source (git repo, fetchurl, etc.).
   # Scans src for SKILL.md files and packages them under a grouped directory.
   #

@@ -120,3 +120,5 @@ When generating a project-specific role prompt from these references:
 3. **Set output targets** — where to write findings, commit message format, branch strategy
 4. **Drop irrelevant sections** — a CLI project doesn't need the async/SSR criteria from Svelte
 5. **Add project-specific criteria** — your linter config, your error handling conventions, your naming patterns
+
+Note: this directory may contain additional role definitions beyond the built-in ones listed above. Check the directory listing for the full set of available roles.
