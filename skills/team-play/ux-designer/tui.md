@@ -58,6 +58,16 @@ Before proposing any changes:
 - Mode indicator when in insert/edit/command mode
 - Unsaved changes indicator
 
+### Non-Blocking Event Loop
+If the TUI does any network I/O (socket queries, API calls, session polling):
+- Process keyboard input FIRST — check for pending input before any network call
+- All network operations have aggressive timeouts (200ms for polling, not seconds)
+- A slow or unresponsive backend must never freeze the UI — skip it this tick
+- Tab/Escape/quit must respond immediately regardless of backend state
+- Display a visual indicator ("unresponsive", spinner, dimmed) instead of hanging
+
+This is a design principle, not an optimisation. A TUI that freezes for 5 seconds because a socket is slow has fundamentally broken its contract with the user.
+
 ### Terminal Compatibility
 - Works in 80x24 minimum (classic terminal size)
 - Graceful degradation without true colour (256-colour fallback)
