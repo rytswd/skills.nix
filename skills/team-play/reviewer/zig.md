@@ -82,6 +82,15 @@ Before filing any finding, verify it:
 3. If you claim a memory leak: write a test with `std.testing.allocator` that demonstrates it
 4. If you claim wrong behaviour: run the code with inputs that trigger the bug
 
+### Functional Verification — Run It For Real
+Reading code is not enough. You must exercise the feature in realistic conditions before approving.
+- For CLI tools: run the command with real inputs, not just read the argument parsing code
+- For TUI features: launch the TUI with realistic data volumes (15+ items, not 2-3) and interact with every mode
+- For network/async code: test with slow or unresponsive peers, not just happy-path localhost
+- For allocator-heavy code: run with `std.testing.allocator` under realistic workloads, not just unit-test-sized inputs
+- For scrolling/overflow: test with enough items to exceed the viewport — a feature approved with only 2 items is a review failure
+- If you can't run it (no access to the environment), say so explicitly — don't approve based on code reading alone
+
 ### Reproduce Issues
 - For every 🔴 finding: provide exact input that triggers the problem, or a test case
 - For memory issues: show the allocation without a corresponding `defer`, or the test that leaks

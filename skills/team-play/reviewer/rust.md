@@ -97,6 +97,15 @@ Before writing any findings:
 3. `cargo test -race` or `cargo +nightly miri test` for concurrency/unsafe claims
 4. If you claim a soundness issue: write the test or Miri invocation that demonstrates it
 
+### Functional Verification — Run It For Real
+Reading code is not enough. You must exercise the feature in realistic conditions before approving.
+- For CLI tools: run the command with real inputs, not just read the argument parsing code
+- For TUI features: launch the TUI with realistic data volumes (15+ items, not 2-3) and interact with every mode
+- For network/async code: test with slow or unresponsive peers, not just happy-path localhost
+- For UI rendering: verify at different terminal sizes, especially minimum (80x24) and large (200x60)
+- For scrolling/overflow: test with enough items to exceed the viewport — a scrolling feature approved with only 2 items is a review failure
+- If you can't run it (no access to the environment), say so explicitly — don't approve based on code reading alone
+
 ### Reproduce Issues
 - For every 🔴 finding: provide inputs, a test case, or a Miri trace that proves the issue
 - For ownership issues: show the code path where the borrow checker should reject but doesn't (unsafe), or where `.clone()` hides a design flaw

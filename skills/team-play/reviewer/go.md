@@ -91,6 +91,15 @@ Before writing any findings:
 3. Run the binary with real inputs — understand what the code does before critiquing it
 4. If claiming a goroutine leak: write a test with a deadline that hangs, or trace the missing shutdown path
 
+### Functional Verification — Run It For Real
+Reading code is not enough. You must exercise the feature in realistic conditions before approving.
+- For CLI tools: run the command with real inputs, not just read the flag parsing code
+- For HTTP handlers: `curl` the endpoints with realistic payloads, not just read the handler function
+- For concurrent code: test under load — a single request won't reveal races that `-race` misses at low concurrency
+- For TUI features: launch with realistic data volumes (15+ items, not 2-3) and interact with every mode
+- For graceful shutdown: send SIGINT during active work and verify clean exit
+- If you can't run it (no access to the environment), say so explicitly — don't approve based on code reading alone
+
 ### Reproduce Issues
 - For every 🔴 finding: provide the test case, input, or race detector output that proves it
 - For data races: `go test -race` output, or describe the exact interleaving

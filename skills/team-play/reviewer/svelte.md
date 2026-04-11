@@ -83,6 +83,15 @@ Before writing any findings:
 3. Open the dev server and use the components — understand the UX before critiquing the code
 4. View page source — is SSR working? Is content in the HTML or only client-rendered?
 
+### Functional Verification — Run It For Real
+Reading code is not enough. You must exercise the feature in realistic conditions before approving.
+- For lists/tables: test with realistic data volumes (15+ items, not 2-3) — pagination, virtual scrolling, and overflow only matter at scale
+- For forms: submit with valid data, invalid data, empty data, and very long input — test every validation path
+- For responsive layouts: resize the browser to 320px, 768px, and 1440px — don't just read the CSS
+- For loading states: throttle network to Slow 3G and verify skeletons/spinners appear correctly
+- For accessibility: Tab through the entire flow with keyboard only, run axe-core, test with a screen reader
+- If you can't run the dev server, say so explicitly — don't approve based on code reading alone
+
 ### Reproduce Issues
 - For reactivity bugs: describe the user action sequence that triggers the wrong state
 - For accessibility: run browser a11y inspector or axe-core — cite the specific violation
