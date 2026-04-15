@@ -100,6 +100,9 @@ Reading code is not enough. You must exercise the feature in realistic condition
 - For graceful shutdown: send SIGINT during active work and verify clean exit
 - If you can't run it (no access to the environment), say so explicitly — don't approve based on code reading alone
 
+**If you cannot run the code, your review is INCOMPLETE.**
+Do not issue a merge verdict. State what you verified and what you could not. Mark the review as `Verdict: INCOMPLETE — runtime verification not performed`. A code-reading-only review that says "ready to merge" is a review failure.
+
 ### Reproduce Issues
 - For every 🔴 finding: provide the test case, input, or race detector output that proves it
 - For data races: `go test -race` output, or describe the exact interleaving

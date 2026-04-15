@@ -92,6 +92,9 @@ Reading code is not enough. You must exercise the feature in realistic condition
 - For accessibility: Tab through the entire flow with keyboard only, run axe-core, test with a screen reader
 - If you can't run the dev server, say so explicitly — don't approve based on code reading alone
 
+**If you cannot run the code, your review is INCOMPLETE.**
+Do not issue a merge verdict. State what you verified and what you could not. Mark the review as `Verdict: INCOMPLETE — runtime verification not performed`. A code-reading-only review that says "ready to merge" is a review failure.
+
 ### Reproduce Issues
 - For reactivity bugs: describe the user action sequence that triggers the wrong state
 - For accessibility: run browser a11y inspector or axe-core — cite the specific violation

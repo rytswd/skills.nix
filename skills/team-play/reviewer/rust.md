@@ -104,7 +104,9 @@ Reading code is not enough. You must exercise the feature in realistic condition
 - For network/async code: test with slow or unresponsive peers, not just happy-path localhost
 - For UI rendering: verify at different terminal sizes, especially minimum (80x24) and large (200x60)
 - For scrolling/overflow: test with enough items to exceed the viewport — a scrolling feature approved with only 2 items is a review failure
-- If you can't run it (no access to the environment), say so explicitly — don't approve based on code reading alone
+
+**If you cannot run the code, your review is INCOMPLETE.**
+Do not issue a merge verdict. State what you verified (compilation, tests, code reading) and what you could not verify (runtime behaviour). Mark the review as `Verdict: INCOMPLETE — runtime verification not performed` and list the specific commands that need to be run by someone with access. A code-reading-only review that says "ready to merge" is a review failure — it caused a shipped panic in production (a Unicode `truncate()` on a multi-byte char boundary that was invisible to static reading but crashed immediately on launch).
 
 ### Reproduce Issues
 - For every 🔴 finding: provide inputs, a test case, or a Miri trace that proves the issue

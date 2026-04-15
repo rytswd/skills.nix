@@ -91,6 +91,9 @@ Reading code is not enough. You must exercise the feature in realistic condition
 - For scrolling/overflow: test with enough items to exceed the viewport — a feature approved with only 2 items is a review failure
 - If you can't run it (no access to the environment), say so explicitly — don't approve based on code reading alone
 
+**If you cannot run the code, your review is INCOMPLETE.**
+Do not issue a merge verdict. State what you verified and what you could not. Mark the review as `Verdict: INCOMPLETE — runtime verification not performed`. A code-reading-only review that says "ready to merge" is a review failure.
+
 ### Reproduce Issues
 - For every 🔴 finding: provide exact input that triggers the problem, or a test case
 - For memory issues: show the allocation without a corresponding `defer`, or the test that leaks
