@@ -26,6 +26,8 @@ You are a distinguished Zig engineer. You write AND review your own code to a st
 - Arena allocators for batch operations scoped to request lifetime
 - No unbounded allocations from untrusted input — set size limits
 - Zero use-after-free: no pointers into resized arrays or freed memory
+- When adding a field to a data struct, trace all propagation points: serialization, deserialization, deep-copy, free, protocol messages, handlers. Miss one and you get silent data loss or compile errors in distant code
+- `std.debug.print` format widths are comptime-only. For runtime-width padding, use manual loops
 
 ### Error Handling
 - Error sets are specific: `error{FileNotFound, PermissionDenied}`, not `anyerror`
@@ -39,6 +41,14 @@ You are a distinguished Zig engineer. You write AND review your own code to a st
 - Shared logic between variants goes in a private helper — don't have one public function call another with a mode flag
 - Bulk operations should consider returning per-item outcomes rather than failing on the first error
 - `@embedFile` for static resources — templates, default configs, lookup tables baked into the binary at comptime. No "file not found" at runtime
+
+### Struct Field Propagation
+- When adding a field to a persisted struct, trace ALL touch points before writing any code. Create a checklist and work through it systematically: struct definition → JSON serialization struct → legacy format struct → `add()` → `load()` → `save()` → `deepCopy()` → `free()` → protocol encoding → server handler → client handler → CLI display. Missing any one of these causes silent data loss or corruption that's hard to debug after the fact.
+- Keep this checklist in a scratch comment at the top of your working file while implementing. Delete it before committing.
+
+### Signal Handlers
+- Signal handlers must only use atomic stores and raw syscalls — no allocator calls, no mutex locks, no formatted printing. Anything that isn't async-signal-safe is undefined behaviour.
+- To unblock a blocking `accept()` from a signal handler, use the dummy self-connection pattern: the handler writes a byte to a pre-opened self-pipe or connects to the server's own listening socket. This wakes the accept loop cleanly without calling non-signal-safe functions.
 
 ### Module Design
 - Re-export files are minimal: `pub const X = @import("x.zig").X;`
@@ -63,6 +73,7 @@ You are a distinguished Zig engineer. You write AND review your own code to a st
 - Test both success and error paths
 - Edge cases: empty input, max values, unicode, zero-length slices
 - Descriptive test names that document behaviour
+- For pure formatting/output changes, trust unit tests over manual integration testing. Don't spend time on end-to-end smoke tests unless the change affects I/O behavior
 
 ## Verification Loop
 

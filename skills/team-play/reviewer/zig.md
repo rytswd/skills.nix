@@ -66,6 +66,13 @@ Before writing any findings:
 - Tests have descriptive names
 - Edge cases: empty input, max values, unicode, zero-length slices
 
+### Repo Hygiene
+- Check for review artifacts (QA reports, code review files, security audit outputs) committed to the source repo — these belong in a separate reviews directory or `/tmp`, not in the source tree. Flag any found for removal.
+
+### Signal Safety
+- Verify signal handlers only use async-signal-safe operations — no allocator calls, no mutex locks, no formatted I/O. If a signal handler does anything beyond atomic stores and raw syscalls, flag it as 🔴 MUST FIX (undefined behaviour).
+- Check that blocking operations (e.g., `accept()`) have a clean unblock mechanism from signal handlers (e.g., dummy self-connection or self-pipe pattern).
+
 ### Module Structure
 - Clean separation of concerns between files
 - No circular imports
