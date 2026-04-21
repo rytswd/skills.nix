@@ -1,6 +1,135 @@
 # nix/lib/default.nix
 { inputs, flake, ... }:
+let
+  # Shell-escape a path for safe embedding in an activation script.
+  esc = s:
+    "'" + builtins.replaceStrings [ "'" ] [ "'\\''" ] s + "'";
+in
 {
+  # Expose `esc` so the home-manager module and tests share one escaper.
+  inherit esc;
+
+  # Pre-flight validation of localSkills sources, emitted as a shell script.
+  # Runs as the first activation step (before writeBoundary) so bad config
+  # aborts `home-manager switch` before any file mutation occurs.
+  #
+  # Why a shell check instead of an eval-time assertion:
+  # Flake evaluation runs in pure mode, where `builtins.pathExists` on
+  # absolute paths outside the flake/store silently returns `false`, which
+  # would produce false-positive failures for every local skill. The shell
+  # preflight runs with a real $HOME and can see the actual filesystem.
+  #
+  # Arguments:
+  #   localSkills :: attrsOf (path | string)
+  #     Attribute set of skillName → source path. A path ending in ".md" is
+  #     treated as a single-file skill; anything else is treated as a skill
+  #     directory.
+  mkLocalSkillsPreflight =
+    { localSkills }:
+    let
+      checks = builtins.concatStringsSep "" (inputs.nixpkgs.lib.mapAttrsToList
+        (skillName: skillPath:
+          let
+            pathStr = toString skillPath;
+            expectedKind =
+              if inputs.nixpkgs.lib.hasSuffix ".md" pathStr then "file" else "dir";
+          in
+            "_localSkills_check ${esc skillName} ${esc pathStr} ${expectedKind}\n"
+        )
+        localSkills);
+    in ''
+      _localSkills_errors=""
+      _localSkills_check() {
+        # $1 = skillName, $2 = pathStr, $3 = expected kind ("file" or "dir")
+        local name="$1" path="$2" kind="$3"
+        if [ ! -e "$path" ]; then
+          _localSkills_errors+="  - localSkills.$name: source does not exist: $path"$'\n'
+        elif [ "$kind" = "file" ] && [ ! -f "$path" ]; then
+          _localSkills_errors+="  - localSkills.$name: expected a file (.md suffix) but found a directory or special file: $path"$'\n'
+        elif [ "$kind" = "dir" ] && [ ! -d "$path" ]; then
+          _localSkills_errors+="  - localSkills.$name: expected a directory (no .md suffix) but found a file: $path"$'\n'
+        fi
+      }
+      ${checks}
+      if [ -n "$_localSkills_errors" ]; then
+        echo "programs.agent-skills.localSkills: invalid configuration:" >&2
+        printf '%s' "$_localSkills_errors" >&2
+        exit 1
+      fi
+    '';
+
+  # Build an activation script that (re)creates direct out-of-store symlinks
+  # for all localSkills under a given agent's skills directory.
+  #
+  # Semantics:
+  #   - A source ending in ".md" is linked at <agentRoot>/<skillName>/SKILL.md
+  #     with the containing directory created if needed.
+  #   - Any other (directory) source is linked directly at <agentRoot>/<skillName>.
+  #   - The script is idempotent and heals user-deleted links on every run.
+  #   - It refuses to overwrite the source with a self-link (defense against
+  #     stale symlinks from prior configs resolving back into the source).
+  #
+  # Arguments:
+  #   agentRoot   :: string   Absolute path to the agent's skills directory.
+  #   localSkills :: attrsOf (path | string)
+  mkLocalSkillsActivation =
+    { agentRoot, localSkills }:
+    let
+      lines = inputs.nixpkgs.lib.mapAttrsToList (skillName: skillPath:
+        let
+          pathStr = toString skillPath;
+          isMarkdownFile = inputs.nixpkgs.lib.hasSuffix ".md" pathStr;
+          skillDir = "${agentRoot}/${skillName}";
+          linkPath =
+            if isMarkdownFile then "${skillDir}/SKILL.md" else skillDir;
+        in
+          if isMarkdownFile then ''
+            # --- localSkill: ${skillName} (markdown file) ---
+            src=${esc pathStr}
+            dst=${esc linkPath}
+            sdir=${esc skillDir}
+            if [ ! -e "$src" ]; then
+              echo "localSkills: source missing for '${skillName}': $src" >&2
+            else
+              # If skillDir exists as a symlink or as a non-directory regular
+              # file, remove it so we can own a real directory here without
+              # traversing back into the source tree.
+              if [ -L "$sdir" ] || { [ -e "$sdir" ] && [ ! -d "$sdir" ]; }; then
+                $DRY_RUN_CMD rm -f "$sdir"
+              fi
+              $DRY_RUN_CMD mkdir -p "$sdir"
+              # Refuse to overwrite the source with a self-link: if dst is a
+              # real file (not a symlink) and resolves to the same inode as
+              # src, leave it alone.
+              if [ -e "$dst" ] && [ ! -L "$dst" ] \
+                 && [ "$(readlink -f -- "$dst" 2>/dev/null)" = "$(readlink -f -- "$src")" ]; then
+                : # dst is the source file itself; do not touch it
+              else
+                $DRY_RUN_CMD ln -sfn "$src" "$dst"
+              fi
+            fi
+          '' else ''
+            # --- localSkill: ${skillName} (directory) ---
+            src=${esc pathStr}
+            dst=${esc linkPath}
+            if [ ! -d "$src" ]; then
+              echo "localSkills: source directory missing for '${skillName}': $src" >&2
+            else
+              $DRY_RUN_CMD mkdir -p ${esc agentRoot}
+              # Remove any existing symlink or regular file at the link path.
+              # Leave a real directory alone (user may have stored other data).
+              if [ -L "$dst" ] || [ -f "$dst" ]; then
+                $DRY_RUN_CMD rm -f "$dst"
+              fi
+              if [ ! -e "$dst" ]; then
+                $DRY_RUN_CMD ln -sfn "$src" "$dst"
+              fi
+            fi
+          ''
+      ) localSkills;
+    in
+      builtins.concatStringsSep "" lines;
+
   # Build a combined directory of skills from a list of skill derivations.
   # Each skill derivation installs to $out/share/agent-skills/<name>/ (local)
   # or $out/share/agent-skills/<source>/<name>/ (remote).
