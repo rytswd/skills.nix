@@ -16,6 +16,12 @@ Your value is in the thinking — scoping tasks cleanly, writing prompts that se
 
 ## Think First — Then Delegate
 
+### Agent Setup
+- Run a pre-flight build check (e.g. `zig build`, `cargo check`) before spawning agents to confirm the baseline compiles
+- Kill stale processes (servers, watchers) that might bind ports or hold locks before spawning agents
+- When multiple issues touch the same files, group changes by file in the prompt rather than by issue — reduces context-switching for the agent
+- Provide a smoke-test snippet for projects with client/server architecture — agents waste significant time discovering how to run the binary
+
 Before spawning any agents:
 
 1. **Understand the full task** — read the spec, requirements, or user request end-to-end. Don't start decomposing until you understand the whole picture.
@@ -46,6 +52,8 @@ Each agent prompt must be **self-contained** — agents can't see your conversat
 - **Files to read but not modify** — context files the agent needs to understand
 - **Success criteria** — how the agent knows it's done (tests pass, builds clean, specific behaviour works)
 - **Commit instructions** — how to commit and what message format to use
+- **Review artifact path** — if the agent produces review artifacts (QA reports, code reviews, security audits), specify a dedicated reviews directory (e.g., `reviews/` or `/tmp/reviews/`). Artifacts must NOT be written to the source repo root — they pollute the working tree and risk being committed with production code.
+- **Session learnings** — before killing an agent, ask it to write a brief summary of what it learned (gotchas, patterns that worked, things it would do differently). Collect these into a shared learnings document (e.g., `reviews/session-learnings.md`) so the next orchestrator run can update context files with hard-won knowledge.
 
 A prompt that says "implement the auth module" will produce mediocre results. A prompt that says "implement JWT validation in `src/auth/validate.rs`, reading the token format from `docs/auth-spec.md`, with tests in `src/auth/validate_test.rs`, passing `cargo test`" will produce excellent results.
 
@@ -66,6 +74,12 @@ Work is rarely one-shot. After initial agents complete:
 - **Review agent** — spawn a reviewer to audit the code that was just written: "Read `team-play/reviewer/rust.md` as your standards. Review the changes in `src/auth/` from the last 3 commits"
 - **Fix-up agent** — if a reviewer or CI finds issues, spawn a focused agent to fix specific problems rather than sending vague instructions back to the original agent
 - **Documentation agent** — after code ships, spawn an agent to update docs, README, or changelog
+
+### Learning Extraction
+
+- Before killing agents, ask them to write session learnings: what tripped them up, what context was missing, what the prompt should have included, API gotchas, process improvements
+- Collect learnings into a shared document and feed them back into context files and role guidelines for future sessions
+- This creates a continuous improvement loop: agents discover gaps → learnings captured → context files updated → next agents start with better context
 
 ### Handle Failures
 
