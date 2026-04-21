@@ -35,10 +35,22 @@ let
 
   # Generate home.file entries for localSkills for a specific agent.
   # Each local skill gets a direct symlink (mutable, no nix store copy).
+  # Accepts either:
+  #   - a directory (symlinked as-is at <agent>/<skillName>), or
+  #   - any Markdown file (symlinked at <agent>/<skillName>/SKILL.md so the
+  #     skill still lives in its own directory).
   mkLocalSkillEntries = agentName: agent:
     lib.mapAttrs' (skillName: skillPath:
-      lib.nameValuePair "${agent.path}/${skillName}" {
-        source = config.lib.file.mkOutOfStoreSymlink (toString skillPath);
+      let
+        pathStr = toString skillPath;
+        isMarkdownFile = lib.hasSuffix ".md" pathStr;
+        linkPath =
+          if isMarkdownFile
+          then "${agent.path}/${skillName}/SKILL.md"
+          else "${agent.path}/${skillName}";
+      in
+      lib.nameValuePair linkPath {
+        source = config.lib.file.mkOutOfStoreSymlink pathStr;
       }
     ) cfg.localSkills;
 in
@@ -63,8 +75,11 @@ in
       type = lib.types.attrsOf lib.types.path;
       default = { };
       description = ''
-        Local (non-git, non-nix-store) skill directories to symlink directly.
-        Keys are skill names, values are absolute paths to directories containing SKILL.md.
+        Local (non-git, non-nix-store) skills to symlink directly.
+        Keys are skill names, values are absolute paths to either:
+          - a directory containing SKILL.md (symlinked as <agent>/<skillName>), or
+          - any Markdown (.md) file (symlinked as <agent>/<skillName>/SKILL.md,
+            so a containing directory is created automatically).
         These are symlinked as-is (mutable), so changes take effect immediately
         without rebuilding. Useful for private or unpublished skills.
       '';
@@ -72,6 +87,9 @@ in
         {
           air-workflow = /home/user/my-skills/air-workflow;
           my-private-skill = /home/user/my-skills/private;
+          # Also accepted: any .md file — symlinked as <skillName>/SKILL.md
+          chronoa = /home/user/Coding/chronoa/SKILL.md;
+          notes    = /home/user/notes/some-skill.md;
         }
       '';
     };
