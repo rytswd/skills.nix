@@ -33,26 +33,49 @@ let
 
   mkDir = flatten: mkSkillsDir { inherit pkgs flatten; skills = cfg.skills; };
 
-  # Generate home.file entries for localSkills for a specific agent.
-  # Each local skill gets a direct symlink (mutable, no nix store copy).
+  # Shell-escape a path for safe embedding in the activation script.
+  esc = s: "'" + lib.replaceStrings [ "'" ] [ "'\\''" ] s + "'";
+
+  # Build an activation script that (re)creates direct symlinks for all
+  # localSkills under a given agent's skills directory.
+  #
+  # We intentionally bypass home.file here so that:
+  #   - symlinks point straight at the real source (updates propagate instantly),
+  #   - deleted skills get restored on the next `home-manager switch`
+  #     (home.file only reconciles tracked paths at activation, and if nothing
+  #     in the Nix store changed it would not touch user-deleted paths reliably),
+  #   - we don't collide with the `recursive = true` tree used for packaged skills.
+  #
   # Accepts either:
-  #   - a directory (symlinked as-is at <agent>/<skillName>), or
-  #   - any Markdown file (symlinked at <agent>/<skillName>/SKILL.md so the
-  #     skill still lives in its own directory).
-  mkLocalSkillEntries = agentName: agent:
-    lib.mapAttrs' (skillName: skillPath:
-      let
-        pathStr = toString skillPath;
-        isMarkdownFile = lib.hasSuffix ".md" pathStr;
-        linkPath =
-          if isMarkdownFile
-          then "${agent.path}/${skillName}/SKILL.md"
-          else "${agent.path}/${skillName}";
-      in
-      lib.nameValuePair linkPath {
-        source = config.lib.file.mkOutOfStoreSymlink pathStr;
-      }
-    ) cfg.localSkills;
+  #   - a directory (linked as-is at <agent>/<skillName>), or
+  #   - any Markdown file (linked at <agent>/<skillName>/SKILL.md, with the
+  #     containing directory created automatically).
+  mkLocalSkillActivation = agent:
+    let
+      agentRoot = "${config.home.homeDirectory}/${agent.path}";
+      lines = lib.mapAttrsToList (skillName: skillPath:
+        let
+          pathStr = toString skillPath;
+          isMarkdownFile = lib.hasSuffix ".md" pathStr;
+          skillDir = "${agentRoot}/${skillName}";
+          linkPath =
+            if isMarkdownFile
+            then "${skillDir}/SKILL.md"
+            else skillDir;
+        in
+          if isMarkdownFile then ''
+            $DRY_RUN_CMD mkdir -p ${esc skillDir}
+            $DRY_RUN_CMD ln -sfn ${esc pathStr} ${esc linkPath}
+          '' else ''
+            $DRY_RUN_CMD mkdir -p ${esc agentRoot}
+            if [ -L ${esc linkPath} ] || [ -f ${esc linkPath} ]; then
+              $DRY_RUN_CMD rm -f ${esc linkPath}
+            fi
+            $DRY_RUN_CMD ln -sfn ${esc pathStr} ${esc linkPath}
+          ''
+      ) cfg.localSkills;
+    in
+      lib.concatStrings lines;
 in
 {
   options.programs.agent-skills = {
@@ -109,12 +132,17 @@ in
         }
       ) agents
 
-      # Generate home.file entries for each enabled agent (local skills)
-      ++ lib.mapAttrsToList (name: agent:
-        lib.mkIf (cfg.${name}.enable && cfg.localSkills != { }) (
-          mkLocalSkillEntries name agent
-        )
-      ) agents
     );
+
+    # Install local skills via an activation script (out-of-store symlinks)
+    # so that edits to the underlying files are reflected immediately and
+    # user-deleted entries are restored on the next activation.
+    home.activation = lib.mkMerge (lib.mapAttrsToList (name: agent:
+      lib.mkIf (cfg.${name}.enable && cfg.localSkills != { }) {
+        "localSkills-${name}" = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+          mkLocalSkillActivation agent
+        );
+      }
+    ) agents);
   };
 }
