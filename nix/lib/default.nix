@@ -39,15 +39,67 @@ in
         localSkills);
     in ''
       _localSkills_errors=""
+
+      # Validate the SKILL.md frontmatter required by the Agent Skills spec
+      # (https://agentskills.io/specification). We enforce the two fields
+      # that pi/codex/claude all treat as mandatory for loading:
+      #   - name        (required)
+      #   - description (required; pi refuses to load skills without it)
+      # Other fields (license, compatibility, allowed-tools, …) are optional
+      # and we don't enforce them here.
+      _localSkills_check_frontmatter() {
+        local name="$1" md="$2"
+        # Extract the first frontmatter block (between leading '---' and the
+        # next '---'). If the file doesn't start with '---', fm stays empty.
+        local fm
+        fm="$(awk '
+          NR==1 && $0=="---" { inFm=1; next }
+          inFm && $0=="---" { exit }
+          inFm
+        ' "$md")"
+        if [ -z "$fm" ]; then
+          _localSkills_errors+="  - localSkills.$name: missing YAML frontmatter block (expected '---' as first line) in $md"$'\n'
+          return
+        fi
+        local fmName fmDesc
+        fmName="$(printf '%s\n' "$fm" | sed -n 's/^name:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')"
+        fmDesc="$(printf '%s\n' "$fm" | sed -n 's/^description:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')"
+        if [ -z "$fmName" ]; then
+          _localSkills_errors+="  - localSkills.$name: required frontmatter field 'name' missing or empty in $md"$'\n'
+        fi
+        if [ -z "$fmDesc" ]; then
+          _localSkills_errors+="  - localSkills.$name: required frontmatter field 'description' missing or empty in $md"$'\n'
+        fi
+        # Non-fatal: warn if frontmatter name disagrees with the mount key,
+        # since pi warns and may de-duplicate on collision.
+        if [ -n "$fmName" ] && [ "$fmName" != "$name" ]; then
+          echo "localSkills: warning: '$md' declares name='$fmName' but is mounted as localSkills.$name" >&2
+        fi
+      }
+
       _localSkills_check() {
         # $1 = skillName, $2 = pathStr, $3 = expected kind ("file" or "dir")
         local name="$1" path="$2" kind="$3"
         if [ ! -e "$path" ]; then
           _localSkills_errors+="  - localSkills.$name: source does not exist: $path"$'\n'
-        elif [ "$kind" = "file" ] && [ ! -f "$path" ]; then
-          _localSkills_errors+="  - localSkills.$name: expected a file (.md suffix) but found a directory or special file: $path"$'\n'
-        elif [ "$kind" = "dir" ] && [ ! -d "$path" ]; then
-          _localSkills_errors+="  - localSkills.$name: expected a directory (no .md suffix) but found a file: $path"$'\n'
+          return
+        fi
+        if [ "$kind" = "file" ]; then
+          if [ ! -f "$path" ]; then
+            _localSkills_errors+="  - localSkills.$name: expected a file (.md suffix) but found a directory or special file: $path"$'\n'
+            return
+          fi
+          _localSkills_check_frontmatter "$name" "$path"
+        else
+          if [ ! -d "$path" ]; then
+            _localSkills_errors+="  - localSkills.$name: expected a directory (no .md suffix) but found a file: $path"$'\n'
+            return
+          fi
+          if [ ! -f "$path/SKILL.md" ]; then
+            _localSkills_errors+="  - localSkills.$name: directory is missing SKILL.md: $path/SKILL.md"$'\n'
+            return
+          fi
+          _localSkills_check_frontmatter "$name" "$path/SKILL.md"
         fi
       }
       ${checks}

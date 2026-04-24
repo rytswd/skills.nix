@@ -41,6 +41,18 @@ let
     # no .md suffix but the path will be a file
     localSkills = { wrong = "/TESTROOT/src/file-as-dir"; };
   };
+  preflightNoFrontmatter = mkLocalSkillsPreflight {
+    localSkills = { bare = "/TESTROOT/src/bare.md"; };
+  };
+  preflightMissingName = mkLocalSkillsPreflight {
+    localSkills = { noname = "/TESTROOT/src/noname.md"; };
+  };
+  preflightMissingDescription = mkLocalSkillsPreflight {
+    localSkills = { nodesc = "/TESTROOT/src/nodesc.md"; };
+  };
+  preflightDirNoSkillMd = mkLocalSkillsPreflight {
+    localSkills = { hollow = "/TESTROOT/src/hollow-dir"; };
+  };
 
   activation = mkLocalSkillsActivation {
     agentRoot = "/TESTROOT/home/.agents/skills";
@@ -56,16 +68,23 @@ let
   };
 
 in pkgs.runCommand "check-local-skills" {
-  nativeBuildInputs = [ pkgs.bash pkgs.coreutils ];
+  nativeBuildInputs = [ pkgs.bash pkgs.coreutils pkgs.gawk pkgs.gnused pkgs.gnugrep ];
   passAsFile = [
     "preflightOk" "preflightMissing"
     "preflightWrongKindFile" "preflightWrongKindDir"
+    "preflightNoFrontmatter"
+    "preflightMissingName" "preflightMissingDescription"
+    "preflightDirNoSkillMd"
     "activation" "selfLinkActivation"
   ];
   preflightOk = wrap preflightOk;
   preflightMissing = wrap preflightMissing;
   preflightWrongKindFile = wrap preflightWrongKindFile;
   preflightWrongKindDir = wrap preflightWrongKindDir;
+  preflightNoFrontmatter = wrap preflightNoFrontmatter;
+  preflightMissingName = wrap preflightMissingName;
+  preflightMissingDescription = wrap preflightMissingDescription;
+  preflightDirNoSkillMd = wrap preflightDirNoSkillMd;
   activation = wrap activation;
   selfLinkActivation = wrap selfLinkActivation;
 } ''
@@ -90,16 +109,30 @@ in pkgs.runCommand "check-local-skills" {
   fail() { echo "FAIL: $*" >&2; exit 1; }
   pass() { echo "PASS: $*"; }
 
+  # Canonical minimal valid SKILL.md frontmatter helper.
+  valid_frontmatter() {
+    local name="$1"
+    cat <<EOF
+---
+name: $name
+description: Test skill for local-skills preflight checks.
+---
+# $name
+Body.
+EOF
+  }
+
   ######################################################################
-  # 1. Preflight: happy path — all sources present with correct kind.
+  # 1. Preflight: happy path — all sources present, correct kind, and
+  #    have valid SKILL.md frontmatter (name + description).
   ######################################################################
   setup_root
-  echo "hello" > "$TESTROOT/src/md-skill.md"
+  valid_frontmatter "md-skill"  > "$TESTROOT/src/md-skill.md"
   mkdir -p "$TESTROOT/src/dir-skill"
-  touch "$TESTROOT/src/dir-skill/SKILL.md"
+  valid_frontmatter "dir-skill" > "$TESTROOT/src/dir-skill/SKILL.md"
   materialize "$preflightOkPath" "$TESTROOT/preflight.sh"
   if ! "$TESTROOT/preflight.sh"; then
-    fail "preflight should succeed when all sources exist with correct kind"
+    fail "preflight should succeed when all sources exist with valid frontmatter"
   fi
   pass "preflight: happy path"
 
@@ -142,12 +175,74 @@ in pkgs.runCommand "check-local-skills" {
   pass "preflight: no-suffix-on-file rejected"
 
   ######################################################################
+  # 4a. Preflight: .md file with no frontmatter block → error.
+  ######################################################################
+  setup_root
+  printf '# No frontmatter here\nJust body.\n' > "$TESTROOT/src/bare.md"
+  materialize "$preflightNoFrontmatterPath" "$TESTROOT/preflight.sh"
+  rc=$(bash -c "'$TESTROOT/preflight.sh' >/dev/null 2>&1; echo \$?")
+  [ "$rc" = "1" ] || fail "preflight-no-fm: expected exit 1, got $rc"
+  diag="$("$TESTROOT/preflight.sh" 2>&1 || true)"
+  echo "$diag" | grep -q "missing YAML frontmatter block" \
+    || fail "preflight-no-fm: wrong diagnostic. Got: $diag"
+  pass "preflight: missing frontmatter rejected"
+
+  ######################################################################
+  # 4c. Preflight: frontmatter present but no 'name:' → error.
+  ######################################################################
+  setup_root
+  cat > "$TESTROOT/src/noname.md" <<'EOF'
+---
+description: Has a description but no name.
+---
+body
+EOF
+  materialize "$preflightMissingNamePath" "$TESTROOT/preflight.sh"
+  rc=$(bash -c "'$TESTROOT/preflight.sh' >/dev/null 2>&1; echo \$?")
+  [ "$rc" = "1" ] || fail "preflight-no-name: expected exit 1, got $rc"
+  diag="$("$TESTROOT/preflight.sh" 2>&1 || true)"
+  echo "$diag" | grep -q "frontmatter field 'name' missing" \
+    || fail "preflight-no-name: wrong diagnostic. Got: $diag"
+  pass "preflight: missing 'name' rejected"
+
+  ######################################################################
+  # 4d. Preflight: frontmatter present but no 'description:' → error.
+  ######################################################################
+  setup_root
+  cat > "$TESTROOT/src/nodesc.md" <<'EOF'
+---
+name: nodesc
+---
+body
+EOF
+  materialize "$preflightMissingDescriptionPath" "$TESTROOT/preflight.sh"
+  rc=$(bash -c "'$TESTROOT/preflight.sh' >/dev/null 2>&1; echo \$?")
+  [ "$rc" = "1" ] || fail "preflight-no-desc: expected exit 1, got $rc"
+  diag="$("$TESTROOT/preflight.sh" 2>&1 || true)"
+  echo "$diag" | grep -q "frontmatter field 'description' missing" \
+    || fail "preflight-no-desc: wrong diagnostic. Got: $diag"
+  pass "preflight: missing 'description' rejected"
+
+  ######################################################################
+  # 4e. Preflight: directory skill without SKILL.md inside → error.
+  ######################################################################
+  setup_root
+  mkdir -p "$TESTROOT/src/hollow-dir"   # no SKILL.md inside
+  materialize "$preflightDirNoSkillMdPath" "$TESTROOT/preflight.sh"
+  rc=$(bash -c "'$TESTROOT/preflight.sh' >/dev/null 2>&1; echo \$?")
+  [ "$rc" = "1" ] || fail "preflight-dir-no-skillmd: expected exit 1, got $rc"
+  diag="$("$TESTROOT/preflight.sh" 2>&1 || true)"
+  echo "$diag" | grep -q "directory is missing SKILL.md" \
+    || fail "preflight-dir-no-skillmd: wrong diagnostic. Got: $diag"
+  pass "preflight: dir skill missing SKILL.md rejected"
+
+  ######################################################################
   # 5. Activation: creates expected links for md file + directory skills.
   ######################################################################
   setup_root
-  echo "md content" > "$TESTROOT/src/md-skill.md"
+  valid_frontmatter "md-skill"  > "$TESTROOT/src/md-skill.md"
   mkdir -p "$TESTROOT/src/dir-skill"
-  echo "dir content" > "$TESTROOT/src/dir-skill/SKILL.md"
+  valid_frontmatter "dir-skill" > "$TESTROOT/src/dir-skill/SKILL.md"
   materialize "$activationPath" "$TESTROOT/activate.sh"
   "$TESTROOT/activate.sh"
 
@@ -157,7 +252,7 @@ in pkgs.runCommand "check-local-skills" {
   target="$(readlink "$linkMd")"
   [ "$target" = "$TESTROOT/src/md-skill.md" ] \
     || fail "activation: md symlink target wrong: $target"
-  [ "$(cat "$linkMd")" = "md content" ] \
+  grep -q '^name: md-skill$' "$linkMd" \
     || fail "activation: md symlink does not resolve to source content"
   # Parent must be a real directory, not a symlink
   parent="$TESTROOT/home/.agents/skills/md-skill"
