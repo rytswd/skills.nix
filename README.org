@@ -21,56 +21,6 @@ Every skill follows the [[https://agentskills.io/specification][Agent Skills sta
 
 ** ✨ Skills
 
-*** Local
-
-#+html:<details>
-#+html:<summary><strong>kagi-search</strong> — Web search &amp; summarization via <a href="https://kagi.com">Kagi</a> APIs</summary>
-#+html:<br>
-
-- *Compatibility*: Requires =KAGI_API_KEY=, =curl=, =jq=
-- *Invoke*: =/skill:kagi-search= (in Pi)
-- *Scripts*: =scripts/search.sh=, =scripts/summarize.sh=
-
-Search the web and summarize content using Kagi's APIs:
-- =search.sh "query" [limit]= — Search and format results
-- =summarize.sh <url-or-text> [engine] [type]= — Summarize any content
-
-Summarizer supports articles, PDFs, YouTube, audio, PowerPoint, Word docs.
-Three engines: =cecil= (fast), =agnes= (formal), =muriel= (best quality).
-Two output types: =summary= (prose) or =takeaway= (bullet points).
-
-#+html:</details>
-
-#+html:<details>
-#+html:<summary><strong>workmux-workflow</strong> — Orchestration patterns for parallel AI agents using <a href="https://github.com/raine/workmux">workmux</a></summary>
-#+html:<br>
-
-- *Compatibility*: Requires =workmux=, =git=, and =tmux=
-- *Invoke*: =/skill:workmux-workflow= (in Pi)
-
-Patterns for the orchestrator role when coordinating multiple AI agents:
-- Task decomposition with non-overlapping file scopes
-- Prompt template with file scope, context references, and commit instructions
-- Spawn → monitor → review → merge workflow
-- Anti-patterns: overlapping scopes, missing commit before merge, too many parallel agents
-
-#+html:</details>
-
-#+html:<details>
-#+html:<summary><strong>context7</strong> — Library documentation lookup via <a href="https://github.com/upstash/context7">Context7</a></summary>
-#+html:<br>
-
-- *Compatibility*: Requires =curl= and =jq=; optionally =npx= for MCP setup
-- *Invoke*: =/skill:context7= (in Pi)
-- *Scripts*: =scripts/query.sh=
-
-Look up current, version-specific library documentation:
-- =query.sh resolve "nextjs"= — Find a library's Context7 ID
-- =query.sh docs "/vercel/next.js" "app router"= — Query documentation
-- Also documents MCP server setup for native integration
-
-#+html:</details>
-
 #+html:<details>
 #+html:<summary><strong>team-play</strong> — Distinguished / staff+ role prompts for engineering, review, security, UX, and orchestration</summary>
 #+html:<br>
@@ -86,17 +36,15 @@ verification steps, and output format.
 Shipped roles (use as starting points, adapt to your project's
 conventions):
 
-| Category       | Roles                                              |
-|----------------+----------------------------------------------------|
-| =engineer/=    | =go=, =rust=, =svelte=, =zig=                      |
-| =reviewer/=    | =go=, =rust=, =svelte=, =zig=                      |
-| =security/=    | =code-audit=, =infra=, =supply-chain=              |
-| =ux-designer/= | =cli=, =mobile=, =tablet=, =tui=, =web-frontend=   |
-| =orchestrator/=| =manager=                                          |
+- =engineer/= — =go=, =rust=, =svelte=, =zig=
+- =reviewer/= — =go=, =rust=, =svelte=, =zig=
+- =security/= — =code-audit=, =infra=, =supply-chain=
+- =ux-designer/= — =cli=, =mobile=, =tablet=, =tui=, =web-frontend=
+- =orchestrator/= — =manager=
 
-----
+**** Extending team-play
 
-*Extending team-play.* Use =lib.mkTeamPlay= to merge in your own role directories — add new
+Use =lib.mkTeamPlay= to merge in your own role directories — add new
 roles in new categories, add languages / platforms to existing
 categories, or override the shipped files entirely. The base
 =SKILL.md= is preserved.
@@ -146,15 +94,25 @@ you'd use a packaged skill (in =skills=, in =mkRemoteSkills=, etc.).
 #+html:<summary><strong>user-context suite</strong> — my-env / my-tools / my-style / my-workflow (templates to fill in per machine)</summary>
 #+html:<br>
 
-Four empty-by-design templates that capture the user's machine and
-working preferences. They are *not* drop-in skills — install one only
-after you've filled it in with your own content. The shipped
-frontmatter description tells agents this is template content; an
-untouched template will *correctly* refuse to give an agent any
-user-specific context.
+Agents repeatedly suggest commands and write prose that don't match
+your machine — =apt-get install= on NixOS, =brew= on Linux,
+force-pushing when you never force-push, verbose preambles when you
+want terse lists. The fix is to give the agent a small, sharp
+reference that it loads only when relevant.
 
-Designed as a small *suite* with non-overlapping trigger keywords so
-implicit invocation picks the right one for a given task.
+This suite *is* that reference: four focused skills, each with a
+tight description that triggers only on the right kind of task, so
+the agent gets the right context at the right moment without
+flooding every turn with everything you've ever told it.
+
+The templates ship *empty by design* — they are not drop-in skills.
+Install one only after you've filled it in with your own content.
+An untouched template's frontmatter explicitly tells agents the
+file is unfilled, so installing one verbatim correctly refuses to
+give the agent any user-specific context.
+
+The four are designed as a *suite* with non-overlapping trigger
+keywords so implicit invocation picks the right one for a given task.
 
 #+html:<details>
 #+html:<summary><strong>my-env</strong> — OS / shell / WM / hardware / secret store</summary>
@@ -207,10 +165,10 @@ what its text says).
 
 #+html:</details>
 
-----
+**** Customizing the templates
 
-*Customizing the templates.* The four templates are intended to be
-customized per machine, not installed verbatim. Recommended workflow:
+The four templates are intended to be customized per machine, not
+installed verbatim. Recommended workflow:
 
 1. Seed the templates you care about into your dotfiles repo. The
    shipped =my-context= CLI handles the bookkeeping for you:
@@ -256,12 +214,41 @@ change faster than dotfiles get rebuilt.
 
 #+html:</details>
 
-*** Remote
+#+html:<details>
+#+html:<summary><strong>kagi-search</strong> — Web search &amp; summarization via <a href="https://kagi.com">Kagi</a> APIs</summary>
+#+html:<br>
 
-Remote skills are fetched from upstream repositories. Use =lib.mkRemoteSkills= to add skills from any git repo — see [[*Remote Skills][Remote Skills]].
+- *Compatibility*: Requires =KAGI_API_KEY=, =curl=, =jq=
+- *Invoke*: =/skill:kagi-search= (in Pi)
+- *Scripts*: =scripts/search.sh=, =scripts/summarize.sh=
+
+Search the web and summarize content using Kagi's APIs:
+- =search.sh "query" [limit]= — Search and format results
+- =summarize.sh <url-or-text> [engine] [type]= — Summarize any content
+
+Summarizer supports articles, PDFs, YouTube, audio, PowerPoint, Word docs.
+Three engines: =cecil= (fast), =agnes= (formal), =muriel= (best quality).
+Two output types: =summary= (prose) or =takeaway= (bullet points).
+
+#+html:</details>
 
 #+html:<details>
-#+html:<summary><strong>workmux</strong> — 5 upstream skills from <a href="https://github.com/raine/workmux">raine/workmux</a></summary>
+#+html:<summary><strong>workmux-workflow</strong> — Orchestration patterns for parallel AI agents using <a href="https://github.com/raine/workmux">workmux</a></summary>
+#+html:<br>
+
+- *Compatibility*: Requires =workmux=, =git=, and =tmux=
+- *Invoke*: =/skill:workmux-workflow= (in Pi)
+
+Patterns for the orchestrator role when coordinating multiple AI agents:
+- Task decomposition with non-overlapping file scopes
+- Prompt template with file scope, context references, and commit instructions
+- Spawn → monitor → review → merge workflow
+- Anti-patterns: overlapping scopes, missing commit before merge, too many parallel agents
+
+#+html:</details>
+
+#+html:<details>
+#+html:<summary><strong>workmux</strong> — 5 upstream skills from <a href="https://github.com/raine/workmux">raine/workmux</a> (vendored via <code>lib.mkRemoteSkills</code>)</summary>
 #+html:<br>
 
 - *Source*: [[https://github.com/raine/workmux/tree/main/skills][raine/workmux upstream]] (pinned to =v0.1.118=)
@@ -279,6 +266,22 @@ Installs all 5 workmux skills directly from upstream:
 | =rebase= | Smart rebase with conflict resolution | =/skill:rebase= |
 
 #+html:</details>
+
+#+html:<details>
+#+html:<summary><strong>context7</strong> — Library documentation lookup via <a href="https://github.com/upstash/context7">Context7</a></summary>
+#+html:<br>
+
+- *Compatibility*: Requires =curl= and =jq=; optionally =npx= for MCP setup
+- *Invoke*: =/skill:context7= (in Pi)
+- *Scripts*: =scripts/query.sh=
+
+Look up current, version-specific library documentation:
+- =query.sh resolve "nextjs"= — Find a library's Context7 ID
+- =query.sh docs "/vercel/next.js" "app router"= — Query documentation
+- Also documents MCP server setup for native integration
+
+#+html:</details>
+
 
 ** 📦 Installation
 
@@ -364,13 +367,16 @@ This applies to any remote skill integration — grouping by origin is automatic
 
 ** ➕ Adding Skills
 
-There are three ways to add skills to your setup: remote git sources, local filesystem paths, and contributing directly to this repo.
+Three ways to add skills to your setup: remote git sources, local
+filesystem paths, or contributing directly to this repo. All skills
+follow the [[https://agentskills.io/specification][Agent Skills standard]] —
+a directory containing =SKILL.md= with YAML frontmatter (=name= and
+=description=), plus optional =scripts/=, =references/=, and
+=assets/= subdirectories.
 
-*** Overview
-
-All skills follow the [[https://agentskills.io/specification][Agent Skills standard]] — a directory containing =SKILL.md= with YAML frontmatter (=name= and =description=), plus optional =scripts/=, =references/=, and =assets/= subdirectories.
-
-*** Remote Skills
+#+html:<details>
+#+html:<summary><strong>Remote skills</strong> — pull from any git repo with <code>lib.mkRemoteSkills</code></summary>
+#+html:<br>
 
 Use =lib.mkRemoteSkills= to pull skills from any git repo — no changes to skills.nix needed:
 
@@ -419,7 +425,11 @@ Use =lib.mkRemoteSkills= to pull skills from any git repo — no changes to skil
 
 =mkRemoteSkills= scans the source for =SKILL.md= files and packages them under =<name>/<skill>/=. Works with any git repo, tarball, or fetchurl source.
 
-*** Local Skills
+#+html:</details>
+
+#+html:<details>
+#+html:<summary><strong>Local skills</strong> — symlink unpublished or private skills via <code>localSkills</code></summary>
+#+html:<br>
 
 For private or unpublished skills that live on your local filesystem, use =localSkills=. These are symlinked directly (not copied into the Nix store), so changes take effect immediately without rebuilding:
 
@@ -452,7 +462,11 @@ Each entry creates a symlink from the agent's skill directory (e.g., =~/.agents/
 - Skills under active development
 - Customising the [[*✨ Skills][user-context suite]] (=my-env=, =my-tools=, =my-style=, =my-workflow=) — see that section for the recommended seed-and-edit workflow.
 
-*** In This Repo
+#+html:</details>
+
+#+html:<details>
+#+html:<summary><strong>In this repo</strong> — contribute a new skill to the catalog</summary>
+#+html:<br>
 
 To contribute a new skill to the catalog:
 
@@ -486,6 +500,8 @@ To contribute a new skill to the catalog:
   nix build .#my-skill
   find -L result/ -type f
 #+end_src
+
+#+html:</details>
 
 ** 🧪 Development
 
