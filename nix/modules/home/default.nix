@@ -98,7 +98,7 @@ in
       [
         (lib.mkIf (cfg.localSkills != { }) {
           localSkills-preflight = lib.hm.dag.entryBefore [ "writeBoundary" ] (
-            mkLocalSkillsPreflight { localSkills = cfg.localSkills; }
+            mkLocalSkillsPreflight { inherit pkgs; localSkills = cfg.localSkills; }
           );
         })
       ]
@@ -106,6 +106,7 @@ in
         lib.mkIf (cfg.${name}.enable && cfg.localSkills != { }) {
           "localSkills-${name}" = lib.hm.dag.entryAfter [ "writeBoundary" ] (
             mkLocalSkillsActivation {
+              inherit pkgs;
               agentRoot = "${config.home.homeDirectory}/${agent.path}";
               localSkills = cfg.localSkills;
             }

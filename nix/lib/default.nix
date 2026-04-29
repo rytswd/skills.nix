@@ -20,24 +20,33 @@ in
   # preflight runs with a real $HOME and can see the actual filesystem.
   #
   # Arguments:
+  #   pkgs        :: nixpkgs instance
+  #     Used to pin awk / sed / coreutils onto the script's PATH so the
+  #     preflight runs cleanly inside `home-manager-<user>.service`,
+  #     where systemd does not inherit the user's interactive PATH.
   #   localSkills :: attrsOf (path | string)
   #     Attribute set of skillName → source path. A path ending in ".md" is
   #     treated as a single-file skill; anything else is treated as a skill
   #     directory.
   mkLocalSkillsPreflight =
-    { localSkills }:
+    { pkgs, localSkills }:
     let
-      checks = builtins.concatStringsSep "" (inputs.nixpkgs.lib.mapAttrsToList
+      lib = inputs.nixpkgs.lib;
+      binPath = lib.makeBinPath [ pkgs.gawk pkgs.gnused pkgs.coreutils ];
+      checks = builtins.concatStringsSep "" (lib.mapAttrsToList
         (skillName: skillPath:
           let
             pathStr = toString skillPath;
             expectedKind =
-              if inputs.nixpkgs.lib.hasSuffix ".md" pathStr then "file" else "dir";
+              if lib.hasSuffix ".md" pathStr then "file" else "dir";
           in
             "_localSkills_check ${esc skillName} ${esc pathStr} ${expectedKind}\n"
         )
         localSkills);
     in ''
+      # Pin awk / sed / coreutils on PATH — home-manager's systemd unit
+      # ships a minimal environment without them.
+      export PATH=${binPath}"''${PATH:+:''${PATH}}"
       _localSkills_errors=""
 
       # Validate the SKILL.md frontmatter required by the Agent Skills spec
@@ -122,15 +131,18 @@ in
   #     stale symlinks from prior configs resolving back into the source).
   #
   # Arguments:
+  #   pkgs        :: nixpkgs instance (for PATH — see preflight)
   #   agentRoot   :: string   Absolute path to the agent's skills directory.
   #   localSkills :: attrsOf (path | string)
   mkLocalSkillsActivation =
-    { agentRoot, localSkills }:
+    { pkgs, agentRoot, localSkills }:
     let
-      lines = inputs.nixpkgs.lib.mapAttrsToList (skillName: skillPath:
+      lib = inputs.nixpkgs.lib;
+      binPath = lib.makeBinPath [ pkgs.coreutils ];
+      lines = lib.mapAttrsToList (skillName: skillPath:
         let
           pathStr = toString skillPath;
-          isMarkdownFile = inputs.nixpkgs.lib.hasSuffix ".md" pathStr;
+          isMarkdownFile = lib.hasSuffix ".md" pathStr;
           skillDir = "${agentRoot}/${skillName}";
           linkPath =
             if isMarkdownFile then "${skillDir}/SKILL.md" else skillDir;
@@ -179,8 +191,13 @@ in
             fi
           ''
       ) localSkills;
+      pathPrefix = ''
+        # Pin coreutils (mkdir, rm, ln, readlink, basename, dirname) on PATH —
+        # home-manager's systemd unit ships a minimal environment.
+        export PATH=${binPath}"''${PATH:+:''${PATH}}"
+      '';
     in
-      builtins.concatStringsSep "" lines;
+      pathPrefix + builtins.concatStringsSep "" lines;
 
   # Build a combined directory of skills from a list of skill derivations.
   # Each skill derivation installs to $out/share/agent-skills/<name>/ (local)

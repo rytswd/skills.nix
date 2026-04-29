@@ -27,7 +27,7 @@ let
     (name: pkg: "${pkg}/share/agent-skills/${name}/SKILL.md")
     templates;
 
-  preflight = mkLocalSkillsPreflight { localSkills = preflightAttrs; };
+  preflight = mkLocalSkillsPreflight { inherit pkgs; localSkills = preflightAttrs; };
 
   wrap = script: ''
     #!${pkgs.runtimeShell}

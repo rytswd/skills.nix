@@ -29,32 +29,33 @@ let
     dir-skill = "/TESTROOT/src/dir-skill";       # no suffix  → dir
   };
 
-  preflightOk = mkLocalSkillsPreflight { localSkills = skills; };
-  preflightMissing = mkLocalSkillsPreflight {
+  preflightOk = mkLocalSkillsPreflight { inherit pkgs; localSkills = skills; };
+  preflightMissing = mkLocalSkillsPreflight { inherit pkgs;
     localSkills = { ghost = "/TESTROOT/does-not-exist.md"; };
   };
-  preflightWrongKindFile = mkLocalSkillsPreflight {
+  preflightWrongKindFile = mkLocalSkillsPreflight { inherit pkgs;
     # .md suffix but the path will be a directory
     localSkills = { wrong = "/TESTROOT/src/dir-as-md.md"; };
   };
-  preflightWrongKindDir = mkLocalSkillsPreflight {
+  preflightWrongKindDir = mkLocalSkillsPreflight { inherit pkgs;
     # no .md suffix but the path will be a file
     localSkills = { wrong = "/TESTROOT/src/file-as-dir"; };
   };
-  preflightNoFrontmatter = mkLocalSkillsPreflight {
+  preflightNoFrontmatter = mkLocalSkillsPreflight { inherit pkgs;
     localSkills = { bare = "/TESTROOT/src/bare.md"; };
   };
-  preflightMissingName = mkLocalSkillsPreflight {
+  preflightMissingName = mkLocalSkillsPreflight { inherit pkgs;
     localSkills = { noname = "/TESTROOT/src/noname.md"; };
   };
-  preflightMissingDescription = mkLocalSkillsPreflight {
+  preflightMissingDescription = mkLocalSkillsPreflight { inherit pkgs;
     localSkills = { nodesc = "/TESTROOT/src/nodesc.md"; };
   };
-  preflightDirNoSkillMd = mkLocalSkillsPreflight {
+  preflightDirNoSkillMd = mkLocalSkillsPreflight { inherit pkgs;
     localSkills = { hollow = "/TESTROOT/src/hollow-dir"; };
   };
 
   activation = mkLocalSkillsActivation {
+    inherit pkgs;
     agentRoot = "/TESTROOT/home/.agents/skills";
     localSkills = skills;
   };
@@ -63,6 +64,7 @@ let
   # configuring a skill whose dst resolves (through a stale symlink) back to
   # src. We set this up in the test harness below.
   selfLinkActivation = mkLocalSkillsActivation {
+    inherit pkgs;
     agentRoot = "/TESTROOT/home/.agents/skills";
     localSkills = { selfy = "/TESTROOT/src/selfy.md"; };
   };
