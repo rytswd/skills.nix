@@ -86,20 +86,65 @@ verification steps, and output format.
 Shipped roles (use as starting points, adapt to your project's
 conventions):
 
-| Category      | Roles                                              |
-|---------------+----------------------------------------------------|
-| =engineer/=   | =go=, =rust=, =svelte=, =zig=                      |
-| =reviewer/=   | =go=, =rust=, =svelte=, =zig=                      |
-| =security/=   | =code-audit=, =infra=, =supply-chain=              |
-| =ux-designer/=| =cli=, =mobile=, =tablet=, =tui=, =web-frontend=   |
+| Category       | Roles                                              |
+|----------------+----------------------------------------------------|
+| =engineer/=    | =go=, =rust=, =svelte=, =zig=                      |
+| =reviewer/=    | =go=, =rust=, =svelte=, =zig=                      |
+| =security/=    | =code-audit=, =infra=, =supply-chain=              |
+| =ux-designer/= | =cli=, =mobile=, =tablet=, =tui=, =web-frontend=   |
 | =orchestrator/=| =manager=                                          |
 
-See [[*Adding Team-Play Roles][Adding Team-Play Roles]] below for
-how to extend or override role files via =lib.mkTeamPlay=.
+----
+
+*Extending team-play.* Use =lib.mkTeamPlay= to merge in your own role directories — add new
+roles in new categories, add languages / platforms to existing
+categories, or override the shipped files entirely. The base
+=SKILL.md= is preserved.
+
+#+begin_src nix
+  { inputs, pkgs, ... }:
+  let
+    skills-nix = inputs.skills-nix;
+    system = pkgs.stdenv.hostPlatform.system;
+  in
+  {
+    imports = [ skills-nix.homeModules.default ];
+
+    programs.agent-skills = {
+      enable = true;
+      skills = [
+        # Built-in team-play with your extra roles merged in
+        (skills-nix.lib.mkTeamPlay {
+          inherit pkgs;
+          extraRoles = [
+            # Each entry is a directory laid out like:
+            #   <dir>/<category>/<role>.md
+            # e.g. my-roles/engineer/python.md, my-roles/dba/postgres.md
+            ./my-roles
+            inputs.company-roles      # works with any flake input or path
+          ];
+        })
+      ];
+      pi.enable = true;
+    };
+  }
+#+end_src
+
+Merge semantics:
+
+- Files at the same path *override* the base (your file wins).
+- New categories / files are added alongside the built-in ones.
+- The top-level =SKILL.md= cannot be removed; the build fails loudly
+  if an =extraRoles= entry overwrites it.
+
+=mkTeamPlay= returns a regular skill derivation — use it anywhere
+you'd use a packaged skill (in =skills=, in =mkRemoteSkills=, etc.).
 
 #+html:</details>
 
-*** User context templates
+#+html:<details>
+#+html:<summary><strong>user-context suite</strong> — my-env / my-tools / my-style / my-workflow (templates to fill in per machine)</summary>
+#+html:<br>
 
 Four empty-by-design templates that capture the user's machine and
 working preferences. They are *not* drop-in skills — install one only
@@ -162,9 +207,54 @@ what its text says).
 
 #+html:</details>
 
-See [[*Customizing user-context templates][Customizing user-context templates]] below for the
-recommended workflow: seed each template into your dotfiles and mount
-it via =localSkills= so edits propagate without rebuilding.
+----
+
+*Customizing the templates.* The four templates are intended to be
+customized per machine, not installed verbatim. Recommended workflow:
+
+1. Seed the templates you care about into your dotfiles repo. The
+   shipped =my-context= CLI handles the bookkeeping for you:
+
+   #+begin_src bash
+     # All four → ~/dotfiles/skills
+     nix run github:rytswd/skills.nix#my-context -- -o ~/dotfiles/skills
+
+     # Or just a subset
+     nix run github:rytswd/skills.nix#my-context -- -o ~/dotfiles/skills my-env my-tools
+
+     # See `--help` for --force, etc.
+     nix run github:rytswd/skills.nix#my-context -- --help
+   #+end_src
+
+   The CLI skips files that already exist (use =--force= to
+   overwrite) and prints a ready-to-paste =localSkills= block at the
+   end so you can copy it straight into your home-manager config.
+
+2. Edit each file (delete sections you don't care about; an empty
+   section wastes context tokens).
+
+3. Mount only the ones you actually filled in via =localSkills=:
+
+   #+begin_src nix
+     programs.agent-skills.localSkills = {
+       my-env      = "${config.home.homeDirectory}/dotfiles/skills/my-env.md";
+       my-tools    = "${config.home.homeDirectory}/dotfiles/skills/my-tools.md";
+       # Skip the ones you haven't filled in — absent entries don't
+       # burn description tokens or risk misleading the agent.
+     };
+   #+end_src
+
+Edits to the =.md= files take effect immediately (out-of-store
+symlinks); no =home-manager switch= needed unless you add or remove
+entries.
+
+If you'd rather have your customised content built and pinned by Nix,
+use =skills= with a small wrapper derivation that copies your file
+into =$out/share/agent-skills/<name>/SKILL.md=. The =localSkills=
+path is recommended for most users because preferences tend to
+change faster than dotfiles get rebuilt.
+
+#+html:</details>
 
 *** Remote
 
@@ -356,111 +446,11 @@ For private or unpublished skills that live on your local filesystem, use =local
   }
 #+end_src
 
-Each entry creates a symlink from the agent's skill directory (e.g., =~/.agents/skills/air-workflow=) directly to the local path. This is ideal for:
+Each entry creates a symlink from the agent's skill directory (e.g., =~/.agents/skills/air-workflow=) directly to the local path. The value can also point at a single =.md= file (it is mounted as =<name>/SKILL.md= with the containing directory created automatically). This is ideal for:
 - Skills based on unpublished tools
 - Personal workflow skills you don't want to share
 - Skills under active development
-
-The value can also point at a single =.md= file (it is mounted as
-=<name>/SKILL.md= with the containing directory created
-automatically), which is the recommended shape for the user-context
-templates below.
-
-**** Customizing user-context templates
-
-The four [[*User context templates][user-context templates]]
-(=my-env=, =my-tools=, =my-style=, =my-workflow=) are intended to be
-customized per machine, not installed verbatim. The recommended
-workflow:
-
-1. Seed the templates you care about into your dotfiles repo. The
-   shipped =my-context= CLI handles the bookkeeping for you:
-
-   #+begin_src bash
-     # All four → ~/dotfiles/skills
-     nix run github:rytswd/skills.nix#my-context -- -o ~/dotfiles/skills
-
-     # Or just a subset
-     nix run github:rytswd/skills.nix#my-context -- -o ~/dotfiles/skills my-env my-tools
-
-     # See `--help` for --force, etc.
-     nix run github:rytswd/skills.nix#my-context -- --help
-   #+end_src
-
-   The CLI skips files that already exist (use =--force= to
-   overwrite) and prints a ready-to-paste =localSkills= block at the
-   end so you can copy it straight into your home-manager config.
-
-2. Edit each file (delete sections you don't care about; an empty
-   section wastes context tokens).
-
-3. Mount only the ones you actually filled in via =localSkills=:
-
-   #+begin_src nix
-     programs.agent-skills.localSkills = {
-       my-env      = "${config.home.homeDirectory}/dotfiles/skills/my-env.md";
-       my-tools    = "${config.home.homeDirectory}/dotfiles/skills/my-tools.md";
-       # Skip the ones you haven't filled in — absent entries don't
-       # burn description tokens or risk misleading the agent.
-     };
-   #+end_src
-
-Edits to the =.md= files take effect immediately (out-of-store
-symlinks); no =home-manager switch= needed unless you add or remove
-entries.
-
-If you'd rather have your customised content built and pinned by Nix,
-use =skills= with a small wrapper derivation that copies your file
-in under =$out/share/agent-skills/<name>/SKILL.md=. The =localSkills=
-path is recommended for most users because preferences tend to
-change faster than dotfiles get rebuilt.
-
-*** Adding Team-Play Roles
-
-The shipped =team-play= skill ([[*team-play][catalog entry]]) is a
-base set of role prompts. Use =lib.mkTeamPlay= to merge in your own
-role directories — add new roles in new categories, add languages /
-platforms to existing categories, or override the shipped files
-entirely. The base =SKILL.md= is preserved.
-
-#+begin_src nix
-  { inputs, pkgs, ... }:
-  let
-    skills-nix = inputs.skills-nix;
-    system = pkgs.stdenv.hostPlatform.system;
-  in
-  {
-    imports = [ skills-nix.homeModules.default ];
-
-    programs.agent-skills = {
-      enable = true;
-      skills = [
-        # Built-in team-play with your extra roles merged in
-        (skills-nix.lib.mkTeamPlay {
-          inherit pkgs;
-          extraRoles = [
-            # Each entry is a directory laid out like:
-            #   <dir>/<category>/<role>.md
-            # e.g. my-roles/engineer/python.md, my-roles/dba/postgres.md
-            ./my-roles
-            inputs.company-roles      # works with any flake input or path
-          ];
-        })
-      ];
-      pi.enable = true;
-    };
-  }
-#+end_src
-
-Merge semantics:
-
-- Files at the same path *override* the base (your file wins).
-- New categories / files are added alongside the built-in ones.
-- The top-level =SKILL.md= cannot be removed; the build fails loudly
-  if an =extraRoles= entry overwrites it.
-
-=mkTeamPlay= returns a regular skill derivation — use it anywhere
-you'd use a packaged skill (in =skills=, in =mkRemoteSkills=, etc.).
+- Customising the [[*✨ Skills][user-context suite]] (=my-env=, =my-tools=, =my-style=, =my-workflow=) — see that section for the recommended seed-and-edit workflow.
 
 *** In This Repo
 
@@ -496,43 +486,6 @@ To contribute a new skill to the catalog:
   nix build .#my-skill
   find -L result/ -type f
 #+end_src
-
-** 📁 Structure
-
-#+begin_example
-skills.nix/
-├── flake.nix                          # Nix flake (numtide/blueprint)
-│
-├── skills/                            # Skill content (SKILL.md + scripts)
-│   ├── kagi-search/
-│   │   ├── SKILL.md
-│   │   └── scripts/
-│   │       ├── search.sh
-│   │       └── summarize.sh
-│   ├── workmux-workflow/SKILL.md
-│   ├── context7/
-│   │   ├── SKILL.md
-│   │   └── scripts/query.sh
-│   ├── my-env/SKILL.md             # User-context templates
-│   ├── my-tools/SKILL.md           # (skeletal, fill in per machine)
-│   ├── my-style/SKILL.md
-│   └── my-workflow/SKILL.md
-│
-├── nix/
-│   ├── lib/default.nix                # mkSkillsDir, mkRemoteSkills
-│   ├── modules/home/default.nix       # Home-Manager module
-│   └── packages/                       # Skill packages (one per skill)
-│       ├── kagi-search/default.nix
-│       ├── workmux-workflow/default.nix
-│       ├── context7/default.nix
-│       └── workmux/default.nix        # Remote (via mkRemoteSkills)
-│
-├── air/                               # Air planning documents
-├── AGENTS.md
-└── README.org
-#+end_example
-
-Each skill gets its own package directory. The home-manager module is the install interface — it reads agent configuration (paths, flatten behavior) and creates the right symlinks.
 
 ** 🧪 Development
 
