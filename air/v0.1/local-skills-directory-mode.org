@@ -1,0 +1,408 @@
+#+title: localSkills — directory-of-skills mode
+#+state: draft
+#+FILETAGS: :feature:skills:local-skills:
+
+* Summary
+
+Extend the existing =programs.agent-skills.localSkills= option so a
+single attribute value can point at a directory whose *children* are
+skill directories (each with their own =SKILL.md=), not a skill itself.
+The activation then mounts every child as a skill under the agent's
+skills directory, namespaced by the attribute key.
+
+This adds a third value-shape to =localSkills= alongside the existing
+two (single =.md= file, single skill directory). Implementation choice
+*B* from the design conversation: overload =localSkills= rather than
+adding a parallel =localSkillsDirs= option.
+
+* Motivation
+
+The user-context skill suite ([[file:user-context-skills/OVERVIEW.org][user-context-skills/OVERVIEW.org]])
+expects users to keep four files (=my-env=, =my-tools=, =my-style=,
+=my-workflow=) in a personal location, typically a dotfiles repo:
+
+#+begin_example
+  ~/dotfiles/skills/
+    my-env/SKILL.md
+    my-tools/SKILL.md
+    my-style/SKILL.md
+    my-workflow/SKILL.md
+#+end_example
+
+Today, mounting all four through =localSkills= requires four
+attribute entries, each with a literal path:
+
+#+begin_src nix
+  localSkills = {
+    my-env      = "${config.home.homeDirectory}/dotfiles/skills/my-env";
+    my-tools    = "${config.home.homeDirectory}/dotfiles/skills/my-tools";
+    my-style    = "${config.home.homeDirectory}/dotfiles/skills/my-style";
+    my-workflow = "${config.home.homeDirectory}/dotfiles/skills/my-workflow";
+  };
+#+end_src
+
+That is mechanical, easy to drift, and obscures the user's actual
+intent ("mount everything under =~/dotfiles/skills=").
+
+The directory-of-skills mode lets the user write:
+
+#+begin_src nix
+  localSkills = {
+    me = "${config.home.homeDirectory}/dotfiles/skills";
+  };
+#+end_src
+
+…and the activation discovers =my-env=, =my-tools=, =my-style=,
+=my-workflow= itself.
+
+* Proposal
+
+** Value semantics (after this change)
+
+Each =localSkills= attribute value is classified at activation time
+based on what it points at on disk:
+
+| Shape on disk                                              | Mounted as                                                  |
+|------------------------------------------------------------+-------------------------------------------------------------|
+| Path ending in =.md=                                       | =<agentRoot>/<key>/SKILL.md= (existing case 1)              |
+| Directory with =SKILL.md= directly inside                  | =<agentRoot>/<key>= (existing case 2)                       |
+| Directory *without* =SKILL.md=, with =*/SKILL.md= children | One mount per child (new case 3, behaviour below)           |
+| Anything else                                              | Preflight error                                             |
+
+The first two are unchanged. The third is the new behaviour.
+
+** Case 3: directory-of-skills mode
+
+The activation walks =<src>= recursively and, for every directory it
+finds that contains a =SKILL.md= file, mounts that directory under
+the agent root.
+
+*** Discovery rule
+
+The walk uses a standard "first hit wins" pattern: once a directory is
+identified as a skill (it has a =SKILL.md=), the walk stops descending
+into it. This prevents double-mounting when a skill itself contains
+further nested =SKILL.md= files (which would normally be its own
+=references/= material, not separate skills).
+
+In shell:
+
+#+begin_src bash
+  find "$src" -mindepth 1 -type d \
+    \( -exec test -f '{}/SKILL.md' \; -print -prune \)
+#+end_src
+
+*** Mount-path rule
+
+For each discovered skill directory =<src>/<rel>/= (where =<rel>= is
+the relative path from =<src>=, e.g. =my-env= or =group-a/nested=),
+the mount path under the agent root depends on the agent's =flatten=
+flag (already part of the module's =agents= table; =false= for
+pi/codex/gemini, =true= for Claude Code):
+
+| =flatten= | Mount path                                                          | Notes                                                          |
+|-----------+---------------------------------------------------------------------+----------------------------------------------------------------|
+| =false=   | =<agentRoot>/<key>/<rel>=                                           | Nested. Pi/Codex/Gemini discover recursively under the root.    |
+| =true=    | =<agentRoot>/<key>__<rel-flattened>=                                | =__= replaces both the key/rel boundary and any =/= inside =<rel>=. |
+
+For a single-level child =<src>/my-env/=, =<rel>= is =my-env= and the
+two cases reduce to =<key>/my-env= and =<key>__my-env= respectively.
+
+This mirrors and extends the existing handling of grouped sources in
+=mkSkillsDir= ([[file:../../nix/lib/default.nix][nix/lib/default.nix]]). =mkSkillsDir= today
+only handles one level for grouped remote sources; this proposal
+generalises the rule to arbitrary depth for local trees. (A follow-up
+can apply the same generalisation to =mkSkillsDir= if useful.)
+
+The attribute key therefore acts as a *source namespace*, just like
+=workmux/= or =anthropic/= for packaged remote-skill bundles. Keys can
+collide with single-skill localSkills entries only if a single skill
+literally has the same name as the namespace, which the preflight
+detects.
+
+** Worked example
+
+User config:
+
+#+begin_src nix
+  localSkills = {
+    me     = "${config.home.homeDirectory}/dotfiles/skills";
+    notes  = "${config.home.homeDirectory}/Coding/notes/SKILL.md";
+    air    = "${config.home.homeDirectory}/Coding/withre/air/air";
+  };
+#+end_src
+
+On-disk layout (note the deep =work/clients/acme/= subtree under
+=~/dotfiles/skills/=, which exercises the recursive walk):
+
+#+begin_example
+  ~/dotfiles/skills/                                    ← directory-of-skills (case 3)
+    my-env/SKILL.md
+    my-tools/SKILL.md
+    work/clients/acme/SKILL.md
+    work/clients/acme/references/notes.md               ← ignored: not a SKILL.md
+  ~/Coding/notes/SKILL.md                               ← .md file (case 1)
+  ~/Coding/withre/air/air/SKILL.md                      ← directory-with-SKILL.md (case 2)
+#+end_example
+
+Resulting symlinks for pi (=flatten = false=, agent root
+=~/.agents/skills/=):
+
+#+begin_example
+  ~/.agents/skills/me/my-env                  → ~/dotfiles/skills/my-env
+  ~/.agents/skills/me/my-tools                → ~/dotfiles/skills/my-tools
+  ~/.agents/skills/me/work/clients/acme       → ~/dotfiles/skills/work/clients/acme
+  ~/.agents/skills/notes/SKILL.md             → ~/Coding/notes/SKILL.md
+  ~/.agents/skills/air                        → ~/Coding/withre/air/air
+#+end_example
+
+Resulting symlinks for Claude (=flatten = true=, agent root
+=~/.claude/skills/=):
+
+#+begin_example
+  ~/.claude/skills/me__my-env                 → ~/dotfiles/skills/my-env
+  ~/.claude/skills/me__my-tools               → ~/dotfiles/skills/my-tools
+  ~/.claude/skills/me__work__clients__acme    → ~/dotfiles/skills/work/clients/acme
+  ~/.claude/skills/notes/SKILL.md             → ~/Coding/notes/SKILL.md
+  ~/.claude/skills/air                        → ~/Coding/withre/air/air
+#+end_example
+
+(Cases 1 and 2 are not affected by =flatten= because they don't have
+inner structure to flatten.)
+
+** Recursion depth
+
+*Recursive from v1.* The activation walks =<src>= to arbitrary depth,
+stopping at any directory that itself contains =SKILL.md= (the "first
+hit wins" rule above). Stray =SKILL.md= files inside another skill's
+=references/= or =assets/= are *not* discovered as separate skills,
+because the walk already stopped descending at the parent skill.
+
+Rationale for going recursive immediately rather than later:
+
+- Users organise dotfiles repos in subdirectories
+  (=skills/work/=, =skills/personal/=, etc.); a one-level limit forces
+  flat layout or four separate =localSkills= entries.
+- The recursive walk is one =find= invocation; the only added
+  complexity is the path-flattening rule for =flatten = true=, which
+  is mechanical (=tr '/' '_'= twice).
+- The first-hit-wins rule eliminates the only ambiguity (nested
+  =SKILL.md= files) cleanly.
+
+* Design Details
+
+** Code sketch — preflight (=mkLocalSkillsPreflight=)
+
+The eval-time logic stays the same — emit a shell preflight that
+classifies and validates at activation time. The classifier becomes a
+three-way switch:
+
+#+begin_src bash
+  _localSkills_check() {
+    local name="$1" path="$2" suffix="$3"  # suffix = "md" | ""
+
+    if [ ! -e "$path" ]; then
+      _localSkills_errors+="  - localSkills.$name: source does not exist: $path"$'\n'
+      return
+    fi
+
+    if [ "$suffix" = "md" ]; then
+      # case 1: .md file
+      [ -f "$path" ] \
+        || { _localSkills_errors+="  - localSkills.$name: expected a file: $path"$'\n'; return; }
+      _localSkills_check_frontmatter "$name" "$path"
+      return
+    fi
+
+    [ -d "$path" ] \
+      || { _localSkills_errors+="  - localSkills.$name: expected a directory: $path"$'\n'; return; }
+
+    if [ -f "$path/SKILL.md" ]; then
+      # case 2: directory-with-SKILL.md
+      _localSkills_check_frontmatter "$name" "$path/SKILL.md"
+      return
+    fi
+
+    # case 3: directory-of-skills — scan one level
+    local found=0
+    for child in "$path"/*/; do
+      while IFS= read -r -d '' skill_dir; do
+      rel="''${skill_dir#$path/}"
+      _localSkills_check_frontmatter "$name/$rel" "$skill_dir/SKILL.md"
+      found=1
+    done < <(find "$path" -mindepth 1 -type d \
+               \( -exec test -f '{}/SKILL.md' \; -print -prune \) -print0)
+    if [ $found -eq 0 ]; then
+      _localSkills_errors+="  - localSkills.$name: directory has no SKILL.md and no <descendant>/SKILL.md: $path"$'\n'
+    fi
+  }
+#+end_src
+
+Frontmatter validation (=_localSkills_check_frontmatter=) is unchanged
+and applies to every discovered =SKILL.md=, including children in case
+3. If any child fails, the whole preflight fails before
+=writeBoundary=.
+
+The Nix-side per-skill emission gains a =suffix= argument:
+
+#+begin_src nix
+  "_localSkills_check ${esc skillName} ${esc pathStr} ${
+    if lib.hasSuffix \".md\" pathStr then \"md\" else \"dir\"
+  }\n"
+#+end_src
+
+** Code sketch — activation (=mkLocalSkillsActivation=)
+
+Signature gains =flatten=:
+
+#+begin_src nix
+  mkLocalSkillsActivation =
+    { agentRoot, flatten ? false, localSkills }: ...
+#+end_src
+
+The per-skill emission becomes a runtime three-way switch. Pseudocode
+of the generated shell per attribute:
+
+#+begin_src bash
+  # --- localSkill: ${skillName} ---
+  src=...; key=${skillName}; agentRoot=...
+  sep=${if flatten then "__" else "/"}
+
+  if [ -f "$src" ] && [[ "$src" == *.md ]]; then
+    # case 1
+    mkdir -p "$agentRoot/$key"
+    ln -sfn "$src" "$agentRoot/$key/SKILL.md"
+  elif [ -d "$src" ] && [ -f "$src/SKILL.md" ]; then
+    # case 2 (existing self-link safety guard preserved)
+    ln -sfn "$src" "$agentRoot/$key"
+  elif [ -d "$src" ]; then
+    # case 3 — recursive walk, prune at each discovered skill
+    while IFS= read -r -d '' skill_dir; do
+      rel="''${skill_dir#$src/}"
+      if [ "$flatten" = "true" ]; then
+        # "a/b/c" → "a__b__c"
+        flat="$(printf '%s' "$rel" | tr '/' '_' | sed 's/_/__/g')"
+        dst="$agentRoot/${key}__$flat"
+      else
+        mkdir -p "$(dirname "$agentRoot/$key/$rel")"
+        dst="$agentRoot/$key/$rel"
+      fi
+      ln -sfn "$skill_dir" "$dst"
+    done < <(find "$src" -mindepth 1 -type d \
+               \( -exec test -f '{}/SKILL.md' \; -print -prune \) -print0)
+  fi
+#+end_src
+
+The self-link safety guard from case 1 (don't overwrite the source
+file with a self-symlink when an old config left a stale parent
+symlink) carries over unchanged.
+
+** Module wiring
+
+In =nix/modules/home/default.nix=, the localSkills activation entry
+already exists per agent. We pass =flatten= through:
+
+#+begin_src nix
+  "localSkills-${name}" = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+    mkLocalSkillsActivation {
+      agentRoot   = "${config.home.homeDirectory}/${agent.path}";
+      flatten     = agent.flatten;
+      localSkills = cfg.localSkills;
+    }
+  );
+#+end_src
+
+** Type of the option
+
+Stays =attrsOf path=. The disk shape determines the mount semantics;
+no Nix-level type change.
+
+The option's =description= and =example= are updated to mention the
+third shape:
+
+#+begin_example
+  Local skills to symlink directly. Each attribute value is one of:
+  - a path to a single Markdown file → mounted as <key>/SKILL.md
+  - a path to a directory containing SKILL.md → mounted as <key>
+  - a path to a directory whose immediate children are skill
+    directories → each child mounted under <key>/<child> (or
+    <key>__<child> for flatten agents like Claude Code)
+#+end_example
+
+** Self-heal behaviour
+
+The activation runs every =home-manager switch=, and case 3 is
+idempotent: =ln -sfn= recreates each child link unconditionally. A
+user who deletes =~/.agents/skills/me/my-env= gets it restored on the
+next switch, same as the other cases.
+
+If a child is *removed* from =<src>= (e.g. user deletes
+=~/dotfiles/skills/my-style/=), the existing symlink under
+=<agentRoot>/<key>/= is *not* cleaned up automatically. This matches
+the current localSkills behaviour for cases 1 and 2 — we never delete
+mount points the user might rely on. A note in the README warns
+about this.
+
+** Test plan (=nix/checks/local-skills.nix=)
+
+Add fixtures for case 3:
+
+1. Happy path — flat: =<src>= contains two valid skill subdirs at one
+   level; both mount under =<agentRoot>/<key>/<child>=
+   (=flatten = false=) and under =<agentRoot>/<key>__<child>=
+   (=flatten = true=).
+2. Happy path — deep: =<src>= contains a deep subtree (e.g.
+   =work/clients/acme/SKILL.md=); mounts at
+   =<agentRoot>/<key>/work/clients/acme= for non-flatten and
+   =<agentRoot>/<key>__work__clients__acme= for flatten.
+3. First-hit-wins: =<src>/parent/SKILL.md= and
+   =<src>/parent/child/SKILL.md= both exist; only =parent= is
+   mounted (the inner =SKILL.md= is treated as part of the parent
+   skill's tree).
+4. Empty source: =<src>= exists but has no =SKILL.md= anywhere →
+   preflight errors with the "no SKILL.md and no <descendant>/SKILL.md"
+   diagnostic.
+5. Mixed children: =<src>= has =child-a/SKILL.md= alongside a stray
+   =README.md= and a =helpers/= directory without =SKILL.md=. Valid
+   skill mounts; the stray file and bare directory are silently
+   skipped.
+6. Frontmatter failure deep in the tree: =<src>/group/sub/SKILL.md=
+   is missing =description=. Preflight aggregates the error and
+   reports the path as =localSkills.<key>/group/sub=.
+7. Self-heal on a deep child: delete one mount point, re-run, verify
+   the descendant symlink is recreated.
+
+** Backwards compatibility
+
+Existing users:
+
+- Case 1 (=.md= file) — unchanged.
+- Case 2 (directory with =SKILL.md=) — unchanged.
+- Case 3 only triggers when the directory does *not* contain a
+  =SKILL.md= and does contain at least one =*/SKILL.md=. This was a
+  preflight error before this change. So no working config breaks; an
+  *erroring* config might start succeeding silently. The preflight's
+  new "directory has no SKILL.md and no <child>/SKILL.md" diagnostic
+  preserves the failure for the pure-empty case.
+
+** Decisions captured (was: open questions)
+
+1. *Mixed children.* Silently skip directories without =SKILL.md=.
+   Lets users keep =README.md=, =.git/=, helper assets, etc.
+   alongside skill subdirs.
+2. *Recursion depth.* Recursive from v1, with the first-hit-wins
+   prune rule above.
+3. *Removed-child cleanup.* Not done. Stale mount points are left
+   in place; matches the existing localSkills behaviour for cases 1
+   and 2. README will note this.
+
+* History
+
+- 2026-04-24: Initial draft. Implementation choice B (overload
+  =localSkills=) per reviewer preference; doc-first per project
+  convention before changing the module.
+- 2026-04-24: Open questions resolved — silent skip on mixed
+  children, recursive support from v1 (with first-hit-wins prune), no
+  removed-child cleanup. Doc updated with deeper worked example,
+  =find=-based discovery, recursive code sketch, and new test cases
+  (deep happy path, first-hit-wins, deep frontmatter failure).
