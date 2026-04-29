@@ -71,6 +71,34 @@ Look up current, version-specific library documentation:
 
 #+html:</details>
 
+#+html:<details>
+#+html:<summary><strong>team-play</strong> — Distinguished / staff+ role prompts for engineering, review, security, UX, and orchestration</summary>
+#+html:<br>
+
+- *Compatibility*: Any agent that supports =SKILL.md=
+- *Invoke*: =/skill:team-play= (in Pi)
+
+A small library of role prompts that shape an agent into a
+distinguished-level specialist for a specific task. Each prompt
+establishes identity, non-negotiable standards, evaluation criteria,
+verification steps, and output format.
+
+Shipped roles (use as starting points, adapt to your project's
+conventions):
+
+| Category      | Roles                                              |
+|---------------+----------------------------------------------------|
+| =engineer/=   | =go=, =rust=, =svelte=, =zig=                      |
+| =reviewer/=   | =go=, =rust=, =svelte=, =zig=                      |
+| =security/=   | =code-audit=, =infra=, =supply-chain=              |
+| =ux-designer/=| =cli=, =mobile=, =tablet=, =tui=, =web-frontend=   |
+| =orchestrator/=| =manager=                                          |
+
+See [[*Adding Team-Play Roles][Adding Team-Play Roles]] below for
+how to extend or override role files via =lib.mkTeamPlay=.
+
+#+html:</details>
+
 *** User context templates
 
 Four empty-by-design templates that capture the user's machine and
@@ -386,6 +414,53 @@ use =skills= with a small wrapper derivation that copies your file
 in under =$out/share/agent-skills/<name>/SKILL.md=. The =localSkills=
 path is recommended for most users because preferences tend to
 change faster than dotfiles get rebuilt.
+
+*** Adding Team-Play Roles
+
+The shipped =team-play= skill ([[*team-play][catalog entry]]) is a
+base set of role prompts. Use =lib.mkTeamPlay= to merge in your own
+role directories — add new roles in new categories, add languages /
+platforms to existing categories, or override the shipped files
+entirely. The base =SKILL.md= is preserved.
+
+#+begin_src nix
+  { inputs, pkgs, ... }:
+  let
+    skills-nix = inputs.skills-nix;
+    system = pkgs.stdenv.hostPlatform.system;
+  in
+  {
+    imports = [ skills-nix.homeModules.default ];
+
+    programs.agent-skills = {
+      enable = true;
+      skills = [
+        # Built-in team-play with your extra roles merged in
+        (skills-nix.lib.mkTeamPlay {
+          inherit pkgs;
+          extraRoles = [
+            # Each entry is a directory laid out like:
+            #   <dir>/<category>/<role>.md
+            # e.g. my-roles/engineer/python.md, my-roles/dba/postgres.md
+            ./my-roles
+            inputs.company-roles      # works with any flake input or path
+          ];
+        })
+      ];
+      pi.enable = true;
+    };
+  }
+#+end_src
+
+Merge semantics:
+
+- Files at the same path *override* the base (your file wins).
+- New categories / files are added alongside the built-in ones.
+- The top-level =SKILL.md= cannot be removed; the build fails loudly
+  if an =extraRoles= entry overwrites it.
+
+=mkTeamPlay= returns a regular skill derivation — use it anywhere
+you'd use a packaged skill (in =skills=, in =mkRemoteSkills=, etc.).
 
 *** In This Repo
 
