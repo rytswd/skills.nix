@@ -1,0 +1,107 @@
+Approaches considered while designing the suite (see
+[[file:suite-conventions.org][suite-conventions.org]] and the per-skill docs) and explicitly
+rejected, with the reasoning. Reference notes — not an Air proposal in
+itself. Each section is one rejected alternative.
+
+* One omnibus =my-env= skill (with =references/=)
+
+*Shape considered.* A single skill named =my-env= whose body covered
+machine + package managers + prose style + git workflow + editor
+preferences, with detailed sub-topics deferred to =references/=.
+
+*Why rejected.* Each section triggers under different conditions, so a
+single description cannot be sharp without being misleading. From
+[[file:research.org][research.org]]:
+
+- Anthropic's documented #1 failure mode is two skills competing for
+  the same trigger; the dual is *one skill triggering on too many
+  topics*, which inflates context with irrelevant sections.
+- Progressive disclosure via =references/= helps when the *main
+  workflow* is unified and detail is needed occasionally; it does not
+  fix a fundamentally multi-topic skill.
+- Direct contradiction with Anthropic's "one skill, one workflow" rule
+  and the community consensus against broad skills.
+
+The split into [[file:suite-conventions.org][suite-conventions.org]] + the per-skill docs
+is the response.
+
+* Putting user context in =AGENTS.md= instead of skills
+
+*Shape considered.* Skip skills entirely; tell users to put global
+preferences in =AGENTS.md= alongside per-repo guidance.
+
+*Why rejected.* Per Codex's documented guidance, =AGENTS.md= is
+*repo-scoped*. User-global preferences that should apply across every
+repo do not fit, and duplicating them into every repo's =AGENTS.md=
+is an anti-pattern. Skills are designed exactly for the global,
+on-demand context case.
+
+* New module option =programs.agent-skills.userContext = { … };=
+
+*Shape considered.* Add a third top-level surface to the home-manager
+module specifically for user-context skills, e.g.
+
+#+begin_src nix
+  programs.agent-skills.userContext = {
+    env      = ./skills/my-env.md;
+    tools    = ./skills/my-tools.md;
+    style    = ./skills/my-style.md;
+    workflow = ./skills/my-workflow.md;
+  };
+#+end_src
+
+*Why rejected.* The existing =skills= and =localSkills= options
+already cover this case cleanly (see [[file:wiring.org][wiring.org]]).
+Adding a third surface:
+
+- Duplicates functionality.
+- Forces users to learn a third option for what is, mechanically,
+  identical to a =localSkills= entry.
+- Couples the home-manager module to a particular naming convention
+  (=userContext.env=, =userContext.tools=, …) that we'd then have to
+  evolve as the suite changes.
+
+If a sugar layer becomes warranted later (e.g. the suite grows to many
+skills and users complain about boilerplate), it can be added without
+breaking either of the existing options.
+
+* Per-host dispatch built into the module
+
+*Shape considered.* A module option that selects which template to
+mount based on hostname:
+
+#+begin_src nix
+  programs.agent-skills.localSkills.my-env = {
+    laptop  = "${...}/laptop-env.md";
+    desktop = "${...}/desktop-env.md";
+  };
+#+end_src
+
+*Why rejected.* Out of scope for v0.1 (already listed in the
+non-goals). Users who need this can do it themselves today by
+branching on =osConfig.networking.hostName= or similar in their
+home-manager config; baking it into the module surface is premature
+without real demand.
+
+* Grouped multi-skill helper (=mkMySuite=)
+
+*Shape considered.* A single helper that takes a directory and
+auto-creates skill packages for any =my-*.md= files inside.
+
+#+begin_src nix
+  skills = inputs.skills-nix.lib.mkMySuite {
+    inherit pkgs;
+    dir = ./skills;
+  };
+#+end_src
+
+*Why rejected (for now).* Encourages users to ship more templates than
+they've actually customized. The current pick-and-choose philosophy
+([[file:suite-conventions.org::*Pick-and-choose philosophy][suite-conventions.org]]) is intentionally explicit: the user
+lists the skills they care about, one by one. Revisit if friction
+reports show up.
+
+* History
+
+- 2026-04-24: Extracted from the original single-file proposal,
+  with two new entries (=mkMySuite= and per-host dispatch) added.

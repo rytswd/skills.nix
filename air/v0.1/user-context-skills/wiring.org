@@ -1,0 +1,120 @@
+How users plug the templates (defined in the per-skill docs, governed
+by [[file:suite-conventions.org][suite-conventions.org]]) into their home-manager config. No new
+module options — reuses the existing =skills= and =localSkills=
+surfaces. Reference notes; not an Air proposal in itself.
+
+* Option A: =localSkills= per template (recommended for iteration)
+
+Users keep their filled-in =.md= files wherever they like (typically
+their dotfiles repo) and mount each one as a skill:
+
+#+begin_src nix
+  programs.agent-skills = {
+    enable = true;
+    pi.enable = true;
+    localSkills = {
+      my-env      = "${config.home.homeDirectory}/dotfiles/skills/my-env.md";
+      my-tools    = "${config.home.homeDirectory}/dotfiles/skills/my-tools.md";
+      my-style    = "${config.home.homeDirectory}/dotfiles/skills/my-style.md";
+      my-workflow = "${config.home.homeDirectory}/dotfiles/skills/my-workflow.md";
+    };
+  };
+#+end_src
+
+** Properties
+
+- Edits propagate instantly (out-of-store symlink → real file).
+- The =localSkills= preflight enforces required frontmatter (=name=,
+  =description=) on each entry; bad config aborts =home-manager switch=
+  before any file mutation.
+- Users only mount the templates they actually filled in; absent
+  entries don't burn description tokens.
+
+** Seeding from the shipped templates
+
+#+begin_src bash
+  nix build github:rytswd/skills.nix#my-tools
+  cp result/share/agent-skills/my-tools/SKILL.md \
+     ~/dotfiles/skills/my-tools.md
+#+end_src
+
+* Option B: =skills= list (Nix-managed content)
+
+For users who want their content committed and built by Nix:
+
+#+begin_src nix
+  programs.agent-skills = {
+    enable = true;
+    pi.enable = true;
+    skills = with inputs.skills-nix.packages.''${pkgs.stdenv.hostPlatform.system}; [
+      my-env
+      my-tools
+      # … any subset
+    ];
+  };
+#+end_src
+
+This installs the *template* unchanged. To customize without forking,
+users use the helper below.
+
+* Helper: =flake.lib.mkMyContext=
+
+A 4-line wrapper that produces a skill derivation from a user-owned
+=.md= file:
+
+#+begin_src nix
+  # nix/lib/default.nix
+  mkMyContext =
+    { pkgs
+    , name          # e.g. "my-tools"
+    , contentFile   # path to the user's SKILL.md
+    }:
+    pkgs.runCommand name { } ''
+      mkdir -p $out/share/agent-skills/${name}
+      cp ${contentFile} $out/share/agent-skills/${name}/SKILL.md
+    '';
+#+end_src
+
+Usage:
+
+#+begin_src nix
+  skills = [
+    (inputs.skills-nix.lib.mkMyContext {
+      inherit pkgs;
+      name = "my-tools";
+      contentFile = ./skills/my-tools.md;
+    })
+  ];
+#+end_src
+
+One helper covers the whole suite; no per-skill helper needed.
+
+* Recommendation matrix
+
+| User's situation                                              | Use      |
+|---------------------------------------------------------------+----------|
+| Tweaks preferences regularly; wants edits to take effect now  | Option A |
+| Wants the skill content reproducible and pinned in their flake | Option B |
+| Wants a template installed verbatim "to fill in later"         | Option B without =mkMyContext= (the shipped package is fine) |
+
+* Pick-and-choose reminder
+
+(Repeated from [[file:suite-conventions.org::*Pick-and-choose philosophy][suite-conventions.org]] because it bears
+on both options.) Users are expected to enable only the templates
+they actually customize. An empty or default-template =my-style= is
+worse than no =my-style= at all — it burns description tokens and may
+mislead the agent.
+
+* Open questions
+
+1. *Ship =mkMyContext= at all?* It's a thin wrapper; arguably
+   replaceable by a documented one-liner using
+   =pkgs.writeTextDir=. Lean toward keeping — it documents the
+   contract and gives a stable name to point docs at.
+2. *Recommendation default in the README.* Lead with Option A
+   (matches expected iteration pattern) or present both equally?
+   Lean toward leading with A.
+
+* History
+
+- 2026-04-24: Extracted from the original single-file proposal.

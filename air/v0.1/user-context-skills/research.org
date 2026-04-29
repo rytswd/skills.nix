@@ -1,0 +1,108 @@
+Reference notes — not a proposal in its own right. The conclusions
+feed [[file:suite-conventions.org][suite-conventions.org]], the per-skill docs ([[file:my-env.org][my-env]],
+[[file:my-tools.org][my-tools]], [[file:my-style.org][my-style]], [[file:my-workflow.org][my-workflow]]), and
+[[file:alternatives.org][alternatives.org]].
+
+* Summary
+
+Compiled from primary sources (Agent Skills spec, Anthropic /Complete
+Guide to Building Skills/, Claude API "Skill authoring best practices",
+Claude Code skills docs, Codex Agent Skills docs, and community
+consensus) before deciding the suite shape.
+
+The headline finding: every authoritative source we checked
+recommends *focused, single-workflow skills with sharp descriptions*
+over broad multi-topic skills.
+
+* Spec-level constraints (agentskills.io)
+
+- Required frontmatter: =name= (1-64 chars, lowercase-kebab, must match
+  parent dir), =description= (1-1024 chars, non-empty, stating *what*
+  and *when*).
+- Three-level progressive disclosure:
+  1. Frontmatter metadata (~100 tokens) — always in context at startup.
+  2. =SKILL.md= body — loaded when the skill activates.
+  3. =references/= / =scripts/= / =assets/= — loaded only when the
+     agent chooses to read them.
+- Recommendation: main =SKILL.md= under 500 lines; detail in
+  =references/=.
+
+* Anthropic guidance
+
+From the Claude API "Skill authoring best practices" page and the
+Anthropic /Complete Guide to Building Skills for Claude/ PDF:
+
+- *"Skills should be focused on a single workflow."*
+- Descriptions must be specific, third-person, and include trigger
+  keywords — they are the discovery mechanism.
+- Two skills with /similar/ descriptions → agent picks the wrong one.
+  This is the single most common failure mode.
+- Design principles: *progressive disclosure, composability,
+  portability*.
+- Iterate from 2-3 concrete use cases, not from abstract taxonomies.
+
+* Codex / OpenAI guidance
+
+From the Codex Agent Skills page and the Codex best-practices page:
+
+- Same spec; same activation model (explicit + implicit).
+- *Skills are for reusable workflows.* Repository conventions belong
+  in =AGENTS.md=; skills are orthogonal.
+- Skills can be toggled per-user via =~/.codex/config.toml=
+  =[[skills.config]]= (restart required).
+
+* Community consensus
+
+From r/ClaudeAI discussions and skills-authoring guides (Dec 2025 –
+Mar 2026):
+
+- "Frontend" is too broad for one skill — break into Languages,
+  Frameworks, Styling, UX/UI.
+- For context-engineering skills specifically: keep the main =SKILL.md=
+  lean, use =references/= heavily.
+- Distinct trigger phrases per skill; avoid descriptions that overlap.
+
+* Implication for "user context"
+
+A single =my-env= skill would be a textbook violation of the "one
+workflow" rule: its body would conflate package-manager choices,
+language style, git workflow, editor preferences, and anti-patterns —
+each of which has a *different trigger condition*.
+
+** Consequences of an omnibus =my-env=
+
+- Fuzzy description → agent either activates it too often (inflating
+  context with irrelevant sections) or too rarely (missing triggers).
+- Cross-section noise in context when only one section is relevant.
+- Harder to iterate: editing the "package manager" section means
+  reloading a huge file whose other sections are unchanged.
+
+** Consequences of a focused suite
+
+- Each skill's description carries crisp trigger keywords.
+- Agent loads only the relevant context per decision.
+- Frontmatter cost is ~100 tokens × N skills, but N is small
+  (3-5) and this cost is bounded and predictable.
+- Matches the documented best practice from both Anthropic and OpenAI.
+
+Based on the evidence, *splitting wins for this use case*. See
+[[file:suite-conventions.org][suite-conventions.org]] for the cross-cutting design and the
+per-skill docs for each member; see [[file:alternatives.org][alternatives.org]] for the
+rejected omnibus shape.
+
+* References
+
+- Agent Skills specification: https://agentskills.io/specification
+- Anthropic, /The Complete Guide to Building Skills for Claude/ (PDF).
+- Claude API docs, "Skill authoring best practices":
+  https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices
+- Claude Code skills: https://code.claude.com/docs/en/skills
+- Codex agent skills: https://developers.openai.com/codex/skills
+- Codex best practices: https://developers.openai.com/codex/learn/best-practices
+- OpenAI API Skills guide: https://developers.openai.com/api/docs/guides/tools-skills
+- Community discussion (broad vs focused skills):
+  https://www.reddit.com/r/ClaudeAI/comments/1pf8evb/one_large_skill_for_frontend_topics_or_multiple/
+
+* History
+
+- 2026-04-24: Initial research compiled while drafting the suite.

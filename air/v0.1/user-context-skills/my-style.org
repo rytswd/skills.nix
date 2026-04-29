@@ -1,0 +1,111 @@
+#+title: my-style — prose, commit, doc, and response-style preferences
+#+state: complete
+#+FILETAGS: :feature:skills:user-context:my-style:
+
+* Summary
+
+A user-authored skill that captures the user's preferences for any
+*written output*: commit messages, PR descriptions, documentation,
+and how the agent itself should phrase responses. Part of the
+user-context skill suite governed by [[file:suite-conventions.org][suite-conventions.org]].
+
+* Motivation
+
+Prose-shape preferences are user-global and stable across projects
+(commit format, PR description shape, doc tone, how terse the agent
+should be in chat) but rarely match a sensible default. =my-style=
+is the trigger window for "writing any text intended for a human or
+for a repo's history".
+
+Why splitting this out (rather than rolling it into one omnibus skill)
+is justified in [[file:research.org][research.org]]; cross-cutting conventions live in
+[[file:suite-conventions.org][suite-conventions.org]].
+
+* Proposal
+
+** Trigger condition
+
+Producing any prose intended for the user or for a repository's
+history:
+
+- Commit messages
+- PR / MR descriptions, summaries, review comments
+- Documentation (README, comments, docstrings)
+- The agent's own response style (tone, terseness, list vs prose,
+  use of headings)
+
+The trigger window is "writing text" rather than "running commands";
+that is what keeps it cleanly separated from =my-env= and =my-tools=.
+
+** Trigger keywords
+
+(From the cross-suite matrix in [[file:suite-conventions.org][suite-conventions.org]].)
+
+=commit message=, =PR description=, =documentation=, =response prose=
+
+** Frontmatter (draft)
+
+#+begin_src yaml
+  ---
+  name: my-style
+  description: >-
+    The user's preferences for prose output style: commit messages,
+    PR descriptions, documentation, and how the agent itself should
+    respond. Load when writing any text intended for the user or for
+    a repository's history.
+  ---
+#+end_src
+
+** Body sections (draft)
+
+#+begin_example
+  # My Style
+
+  > Replace each section with concrete, short facts. Delete sections
+  > you don't care about; empty sections waste context tokens.
+
+  ## Commit messages
+  <!-- e.g. "Conventional Commits; subject ≤ 72 chars; no trailing period." -->
+
+  ## PR descriptions
+  <!-- e.g. "Three sections: Why, What, How to verify. Link to issues." -->
+
+  ## Documentation
+  <!-- e.g. "Org-mode for repo docs; Markdown only when required by tooling." -->
+
+  ## Agent response style
+  <!-- e.g. "Terse by default; show diffs not narratives; no preamble." -->
+#+end_example
+
+** Partition with sibling skills (what this does *not* cover)
+
+- Machine / shell context → see [[file:my-env.org][my-env.org]].
+- Tool / package / build choices → see [[file:my-tools.org][my-tools.org]].
+- Git / PR mechanics (force-push, merge strategy, etc.) → see
+  [[file:my-workflow.org][my-workflow.org]]. =my-style= covers what a PR /
+  commit *says*; =my-workflow= covers how it's *handled*.
+
+* Design Details
+
+** Skill-specific open questions
+
+1. *"Agent response style" inclusion.* Including agent-self-style
+   here makes =my-style= relevant to *every* turn the agent takes,
+   which risks always-loading. Two options:
+   a. Keep it (current draft) — accept the broad trigger.
+   b. Split into =my-style= (artifacts: commits / PRs / docs) and
+      =my-voice= (agent's own response style). Adds another skill,
+      but cleaner trigger windows.
+2. *Doc format.* Some users may prefer specifying conventions per
+   format (Markdown vs Org vs reST). If lists grow, split into a
+   =references/= subdirectory.
+
+* History
+
+- 2026-04-24: Created when the suite proposal was split into per-skill
+  docs.
+- 2026-04-24: Restructured to follow the project Air-doc template
+  (Summary / Motivation / Proposal / Design Details / History).
+- 2026-04-28: Implemented. Template content shipped at
+  =skills/my-style/SKILL.md=, packaged as =nix/packages/my-style/=.
+  Validated by =nix/checks/user-context-skills.nix=. State → complete.

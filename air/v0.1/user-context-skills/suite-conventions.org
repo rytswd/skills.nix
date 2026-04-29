@@ -1,0 +1,113 @@
+Cross-cutting conventions that apply to every skill in the suite.
+Not an Air proposal in itself — it's the shared rule set referenced
+by the per-skill docs ([[file:my-env.org][my-env]], [[file:my-tools.org][my-tools]],
+[[file:my-style.org][my-style]], [[file:my-workflow.org][my-workflow]]).
+
+* Suite membership (v0.1)
+
+Four templates ship in v0.1. Each has its own Air doc; this list is
+the registry.
+
+| Skill          | Doc                              |
+|----------------+----------------------------------|
+| =my-env=       | [[file:my-env.org][my-env.org]]                       |
+| =my-tools=     | [[file:my-tools.org][my-tools.org]]                     |
+| =my-style=     | [[file:my-style.org][my-style.org]]                     |
+| =my-workflow=  | [[file:my-workflow.org][my-workflow.org]]                  |
+
+* Naming
+
+** =my-= prefix
+
+Every skill in the suite uses the =my-= prefix:
+
+- Obviously user-authored at a glance (=kagi-search= is a tool;
+  =my-tools= is the user).
+- Avoids collision with the existing tool-oriented skill namespace.
+- Reads naturally in =/skill:my-style=.
+
+** Suffix is the *category*
+
+The suffix names a coherent trigger category, never a tool name. This
+keeps the description in trigger-keyword space rather than
+brand-name space and lets users keep working when they swap tools.
+
+* Description shape
+
+Every template's frontmatter description follows the same pattern:
+
+#+begin_example
+  <subject phrase>. Load <when phrase>; describes <what phrase>.
+#+end_example
+
+- *subject phrase* — "The user's X preferences on this machine."
+- *when phrase* — explicit trigger keywords. This clause is the most
+  important; it is what implicit invocation matches against.
+- *what phrase* — short summary of the body's coverage.
+
+Trigger-keyword sets must not overlap across the suite. The matrix
+below is illustrative, normative for v0.1, and copied into each
+per-skill doc verbatim.
+
+| Skill         | Trigger keywords (illustrative)                                            |
+|---------------+----------------------------------------------------------------------------|
+| =my-env=      | =shell=, =OS=, =distro=, =WM=, =hardware=, =pass=, =credentials=           |
+| =my-tools=    | =install=, =add=, =fetch=, =build=, =editor=, =formatter=, =LSP=, =repos=  |
+| =my-style=    | =commit message=, =PR description=, =documentation=, =response prose=      |
+| =my-workflow= | =git=, =PR=, =merge=, =deploy=, =review=, =rebase=, =force-push=           |
+
+Description-overlap discipline matters: the documented #1 skill
+failure mode is two skills competing for the same trigger.
+
+* Skeletal-template pattern
+
+Every template's =SKILL.md= follows the same shape:
+
+1. Frontmatter with a sharp description (per the shape above).
+2. One-paragraph body stating "replace the sections below with your
+   own preferences; leave blank sections out to reduce context."
+3. 3-6 section headers with inline HTML-comment prompts.
+4. (Optional) =references/= hint for users who outgrow the main file.
+
+The constant text in (2) is:
+
+#+begin_example
+  > Replace each section with concrete, short facts. Delete sections
+  > you don't care about; empty sections waste context tokens.
+#+end_example
+
+* Pick-and-choose philosophy
+
+Users are expected to enable only the templates they actually
+customize. An empty or default-template skill is *worse* than no skill
+at all — it burns description tokens and may mislead the agent.
+
+The README and [[file:wiring.org][wiring.org]] both repeat this for visibility;
+per-skill docs do not.
+
+* Optional cross-suite check
+
+A pairwise description-overlap check (e.g. simple Jaccard of trigger
+keywords across shipped templates, with a threshold) could live in
+=nix/checks/= and would catch regressions when descriptions are
+edited. Cheap to add; defers to the implementation phase. If
+implemented, it lives at the suite level (one =nix/checks/= entry
+covering all four), not per-skill.
+
+* Open questions (cross-cutting)
+
+These are the suite-wide questions. Per-skill docs list only their own
+open questions.
+
+1. *Suite membership for v0.1.* The four templates above? Adding more
+   later is cheap; removing a shipped one is breaking.
+2. *Prefix.* =my-= vs =user-= / =me-= / =self-=. Lean =my-=.
+3. *Template body opinionation.* Skeletal prompts (current) vs ship
+   example NixOS-flavored content. Keeping skeletal.
+4. *Pairwise description-overlap check.* Implement in =nix/checks/=
+   or rely on manual review?
+
+* History
+
+- 2026-04-24: Extracted from the original suite-design doc when the
+  per-skill docs were broken out.

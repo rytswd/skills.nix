@@ -1,0 +1,124 @@
+#+title: my-env — machine, shell, and secret-store context
+#+state: complete
+#+FILETAGS: :feature:skills:user-context:my-env:
+
+* Summary
+
+A user-authored skill that captures *what kind of machine the agent
+is running on* and *how local secret storage is reached* — both
+needed before suggesting any host-dependent shell command. Part of
+the user-context skill suite governed by [[file:suite-conventions.org][suite-conventions.org]].
+
+* Motivation
+
+Agents repeatedly suggest commands that don't apply on this host
+(=apt-get install= on NixOS, the wrong shell builtins, no =direnv=
+awareness) because they have no host-scoped context. =my-env= is the
+trigger window for "running anything that depends on the host's OS,
+shell, terminal, or local credential store".
+
+The suite-level rationale for splitting out this skill (rather than
+folding it into one omnibus user-context skill) is in [[file:research.org][research.org]];
+the cross-cutting design conventions are in [[file:suite-conventions.org][suite-conventions.org]].
+
+This skill specifically also folds in the previously-proposed
+=my-secret= category. Secret-store choice is intrinsically per-machine
+(which =pass= store, which 1Password account, where =age= keys live),
+and agents need it during shell command execution — the same trigger
+window as "running things on this host".
+
+* Proposal
+
+** Trigger condition
+
+Inspecting / running commands that depend on:
+
+- OS, distro, kernel
+- Window manager / desktop / display server
+- Default shell, prompt, =direnv=
+- Terminal emulator
+- Local secret-storage tooling (e.g. =pass=, 1Password CLI, =age=,
+  =sops-nix=)
+
+** Trigger keywords
+
+(From the cross-suite matrix in [[file:suite-conventions.org][suite-conventions.org]].)
+
+=shell=, =OS=, =distro=, =WM=, =hardware=, =pass=, =credentials=
+
+** Frontmatter (draft)
+
+#+begin_src yaml
+  ---
+  name: my-env
+  description: >-
+    The user's machine and shell environment on this host: OS, distro,
+    window manager, hardware notes, default shell, and how local
+    secret-storage tools are reached. Load before suggesting commands
+    that depend on the shell, terminal, OS, or that need to retrieve
+    credentials from the user's secret store.
+  ---
+#+end_src
+
+** Body sections (draft)
+
+The shipped template uses these section headers, each with an inline
+HTML-comment prompt. Section bodies are empty; users fill them in.
+
+#+begin_example
+  # My Environment
+
+  > Replace each section with concrete, short facts. Delete sections
+  > you don't care about; empty sections waste context tokens.
+
+  ## Machine / OS
+  <!-- e.g. "NixOS 25.05 on X1 Carbon Gen 11; Linux 6.x." -->
+
+  ## Window manager / desktop
+  <!-- e.g. "niri (scrollable WM); no floating windows." -->
+
+  ## Shell / prompt / direnv
+  <!-- e.g. "fish + starship; direnv auto-loads devshells on `cd`." -->
+
+  ## Terminal
+  <!-- e.g. "WezTerm with tmux; truecolor + Nerd Fonts." -->
+
+  ## Secret storage
+  <!-- e.g. "`pass` for everything; e.g. `pass kagi/key`. No 1Password." -->
+#+end_example
+
+** Partition with sibling skills (what this does *not* cover)
+
+- Package managers, build tools, editors, paths → see [[file:my-tools.org][my-tools.org]].
+- Prose / response style → see [[file:my-style.org][my-style.org]].
+- Git / PR / deploy workflow → see [[file:my-workflow.org][my-workflow.org]].
+
+* Design Details
+
+** Future-extension hook
+
+If a user's secret-storage workflow grows complex enough to drown out
+the rest of =my-env=, they can split it back out into a local
+=my-secret= skill (a *user* extension; not a v0.1 ship). The suite
+convention does not need to change to allow this.
+
+** Skill-specific open questions
+
+1. *Description scope.* Current draft mentions both "shell" and
+   "secret store". If real usage shows agents loading the skill
+   *only* for one or the other, consider tightening to a single
+   subject. (Cross-suite split would be re-introducing =my-secret=.)
+2. *=direnv= placement.* It sits under =Shell / prompt / direnv=
+   today. If users describe complex per-project devshell wiring,
+   that may belong in a future =my-direnv= or under =my-tools=.
+
+* History
+
+- 2026-04-24: Created when the suite proposal was split into per-skill
+  docs.
+- 2026-04-24: Restructured to follow the project Air-doc template
+  (Summary / Motivation / Proposal / Design Details / History).
+- 2026-04-28: Implemented. Template content shipped at
+  =skills/my-env/SKILL.md=, packaged as =nix/packages/my-env/=.
+  Frontmatter and trigger-keyword distinctness validated by
+  =nix/checks/user-context-skills.nix=. State → complete.

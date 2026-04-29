@@ -1,0 +1,92 @@
+#+title: User-context skill suite — overview
+#+state: draft
+#+FILETAGS: :feature:skills:user-context:overview:
+
+* Summary
+
+Ship a small *suite* of opinionated-but-empty skill templates that
+capture global, user-scoped context for agents (pi / codex / claude /
+gemini) running on the user's machine. Each skill in the suite has a
+distinct trigger condition, matching the documented best-practice
+guidance from Anthropic and OpenAI.
+
+This is the index document. Each significant decision lives in its
+own focused doc.
+
+* Documents
+
+** Cross-cutting
+
+| Doc                                  | Topic                                                          |
+|--------------------------------------+----------------------------------------------------------------|
+| [[file:research.org][research.org]]                         | Primary-source findings; the "why split"                       |
+| [[file:suite-conventions.org][suite-conventions.org]]                | Naming, description shape, skeletal-template pattern, suite-wide open Qs |
+| [[file:wiring.org][wiring.org]]                           | =localSkills= (Option A) vs =skills= + =mkMyContext= (Option B) |
+| [[file:alternatives.org][alternatives.org]]                     | Approaches considered and rejected                              |
+
+** Per skill (one Air doc per shipped template)
+
+| Skill          | Doc                       | Trigger window (one line)                                        |
+|----------------+---------------------------+------------------------------------------------------------------|
+| =my-env=       | [[file:my-env.org][my-env.org]]                | OS / shell / WM / hardware / secret store                        |
+| =my-tools=     | [[file:my-tools.org][my-tools.org]]              | install / build / editor / formatter / LSP / local paths         |
+| =my-style=     | [[file:my-style.org][my-style.org]]              | commit / PR / docs / agent-response prose                        |
+| =my-workflow=  | [[file:my-workflow.org][my-workflow.org]]           | git / PR mechanics / merge / rebase / deploy                     |
+
+* Goals (recap)
+
+- Suite of small, focused templates — *not* one omnibus file.
+- Each template has a tight =description= with explicit trigger
+  phrases so agents implicitly invoke the right one at the right time.
+- Templates are mostly empty (section headers + inline prompts); no
+  prescriptive content. =skills.nix= does not opine on =nix run= vs
+  =nix shell=, editor choice, etc.
+- Two wiring options on top of the existing =localSkills= and =skills=
+  surfaces. No new module options.
+
+* Non-goals
+
+- Prescribing what users put in each file.
+- Autofill / machine detection.
+- Multi-host selection (one template per host) — users can layer that
+  in their own home-manager config.
+- Replacing =AGENTS.md=. These skills carry *global* preferences;
+  project-specific guidance stays in =AGENTS.md=.
+
+* Status
+
+All eight documents in this directory are =state: draft= until the
+naming and suite-membership questions in [[file:suite-conventions.org][suite-conventions.org]]
+and the helper question in [[file:wiring.org][wiring.org]] are settled.
+
+Promote the directory as a unit:
+
+#+begin_src bash
+  for f in air/v0.1/user-context-skills/*.org; do
+    airctl update "$f" --state ready --force
+  done
+#+end_src
+
+* Cross-cutting open questions
+
+Per-skill open questions live in each skill's own doc. The questions
+that span the whole suite are tracked in [[file:suite-conventions.org][suite-conventions.org]]
+and [[file:wiring.org][wiring.org]]:
+
+- Suite membership for v0.1 — [[file:suite-conventions.org][suite-conventions]]
+- Prefix =my-= vs alternatives — [[file:suite-conventions.org][suite-conventions]]
+- Skeletal vs opinionated body — [[file:suite-conventions.org][suite-conventions]]
+- Pairwise description-overlap check — [[file:suite-conventions.org][suite-conventions]]
+- Whether to ship =mkMyContext= — [[file:wiring.org][wiring]]
+
+* History
+
+- 2026-04-24: Initial draft as a single file.
+- 2026-04-24: Researched primary sources; switched from single skill
+  to a focused suite.
+- 2026-04-24: Re-categorized extras (=my-editor=, =my-paths= folded
+  into =my-tools=; =my-secret= folded into =my-env=) and split the
+  proposal into multiple Air docs under this directory.
+- 2026-04-24: Further split — each shipped skill now has its own Air
+  doc, leaving =suite-conventions.org= as the cross-cutting
+  conventions doc.

@@ -71,6 +71,73 @@ Look up current, version-specific library documentation:
 
 #+html:</details>
 
+*** User context templates
+
+Four empty-by-design templates that capture the user's machine and
+working preferences. They are *not* drop-in skills — install one only
+after you've filled it in with your own content. The shipped
+frontmatter description tells agents this is template content; an
+untouched template will *correctly* refuse to give an agent any
+user-specific context.
+
+Designed as a small *suite* with non-overlapping trigger keywords so
+implicit invocation picks the right one for a given task.
+
+#+html:<details>
+#+html:<summary><strong>my-env</strong> — OS / shell / WM / hardware / secret store</summary>
+#+html:<br>
+
+- *Trigger*: shell, OS, distro, WM, hardware, =pass=, credentials
+- *Body sections*: Machine · Window manager · Shell / direnv · Terminal · Secret storage
+
+Load before suggesting commands that depend on the host OS, shell,
+terminal, or that need to retrieve credentials from the user's
+secret store.
+
+#+html:</details>
+
+#+html:<details>
+#+html:<summary><strong>my-tools</strong> — install / build / editor / formatter / LSP / paths</summary>
+#+html:<br>
+
+- *Trigger*: install, add, fetch, build, editor, formatter, LSP, repos
+- *Body sections*: Package managers · Banned tools · One-off invocation · Build/test · Editor/LSP · Stable paths
+
+Load before suggesting =install=, =add=, =fetch=, build commands, or
+invoking an editor / formatter / LSP. Describes which tools are
+allowed, which are banned, and where things live.
+
+#+html:</details>
+
+#+html:<details>
+#+html:<summary><strong>my-style</strong> — commit / PR / docs / response prose</summary>
+#+html:<br>
+
+- *Trigger*: commit message, PR description, documentation, response prose
+- *Body sections*: Commit messages · PR descriptions · Documentation · Agent response style
+
+Load when writing any text intended for the user or for a
+repository's history.
+
+#+html:</details>
+
+#+html:<details>
+#+html:<summary><strong>my-workflow</strong> — git / PR mechanics / merge / rebase / deploy</summary>
+#+html:<br>
+
+- *Trigger*: git, PR, merge, deploy, review, rebase, force-push
+- *Body sections*: Branching · PR opening / review · Merging / rebasing / force-push · Releases / deploys
+
+Load before any version-control action, opening or reviewing a PR, or
+running a deploy. Covers *how* a change is handled (=my-style= covers
+what its text says).
+
+#+html:</details>
+
+See [[*Customizing user-context templates][Customizing user-context templates]] below for the
+recommended workflow: seed each template into your dotfiles and mount
+it via =localSkills= so edits propagate without rebuilding.
+
 *** Remote
 
 Remote skills are fetched from upstream repositories. Use =lib.mkRemoteSkills= to add skills from any git repo — see [[*Remote Skills][Remote Skills]].
@@ -266,6 +333,60 @@ Each entry creates a symlink from the agent's skill directory (e.g., =~/.agents/
 - Personal workflow skills you don't want to share
 - Skills under active development
 
+The value can also point at a single =.md= file (it is mounted as
+=<name>/SKILL.md= with the containing directory created
+automatically), which is the recommended shape for the user-context
+templates below.
+
+**** Customizing user-context templates
+
+The four [[*User context templates][user-context templates]]
+(=my-env=, =my-tools=, =my-style=, =my-workflow=) are intended to be
+customized per machine, not installed verbatim. The recommended
+workflow:
+
+1. Seed the templates you care about into your dotfiles repo. The
+   shipped =my-context= CLI handles the bookkeeping for you:
+
+   #+begin_src bash
+     # All four → ~/dotfiles/skills
+     nix run github:rytswd/skills.nix#my-context -- -o ~/dotfiles/skills
+
+     # Or just a subset
+     nix run github:rytswd/skills.nix#my-context -- -o ~/dotfiles/skills my-env my-tools
+
+     # See `--help` for --force, etc.
+     nix run github:rytswd/skills.nix#my-context -- --help
+   #+end_src
+
+   The CLI skips files that already exist (use =--force= to
+   overwrite) and prints a ready-to-paste =localSkills= block at the
+   end so you can copy it straight into your home-manager config.
+
+2. Edit each file (delete sections you don't care about; an empty
+   section wastes context tokens).
+
+3. Mount only the ones you actually filled in via =localSkills=:
+
+   #+begin_src nix
+     programs.agent-skills.localSkills = {
+       my-env      = "${config.home.homeDirectory}/dotfiles/skills/my-env.md";
+       my-tools    = "${config.home.homeDirectory}/dotfiles/skills/my-tools.md";
+       # Skip the ones you haven't filled in — absent entries don't
+       # burn description tokens or risk misleading the agent.
+     };
+   #+end_src
+
+Edits to the =.md= files take effect immediately (out-of-store
+symlinks); no =home-manager switch= needed unless you add or remove
+entries.
+
+If you'd rather have your customised content built and pinned by Nix,
+use =skills= with a small wrapper derivation that copies your file
+in under =$out/share/agent-skills/<name>/SKILL.md=. The =localSkills=
+path is recommended for most users because preferences tend to
+change faster than dotfiles get rebuilt.
+
 *** In This Repo
 
 To contribute a new skill to the catalog:
@@ -314,9 +435,13 @@ skills.nix/
 │   │       ├── search.sh
 │   │       └── summarize.sh
 │   ├── workmux-workflow/SKILL.md
-│   └── context7/
-│       ├── SKILL.md
-│       └── scripts/query.sh
+│   ├── context7/
+│   │   ├── SKILL.md
+│   │   └── scripts/query.sh
+│   ├── my-env/SKILL.md             # User-context templates
+│   ├── my-tools/SKILL.md           # (skeletal, fill in per machine)
+│   ├── my-style/SKILL.md
+│   └── my-workflow/SKILL.md
 │
 ├── nix/
 │   ├── lib/default.nix                # mkSkillsDir, mkRemoteSkills

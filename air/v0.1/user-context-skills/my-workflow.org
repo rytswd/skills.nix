@@ -1,0 +1,104 @@
+#+title: my-workflow — git, review, and deploy workflow
+#+state: complete
+#+FILETAGS: :feature:skills:user-context:my-workflow:
+
+* Summary
+
+A user-authored skill that captures the user's git, code-review, and
+deployment workflow on this machine. Loaded before any
+version-control action, PR / review interaction, or deploy. Part of
+the user-context skill suite governed by [[file:suite-conventions.org][suite-conventions.org]].
+
+* Motivation
+
+Workflow preferences (rebase vs merge, force-push policy, who
+reviews when, deploy mechanics) are user- and team-global and almost
+always violated by default agent behaviour. =my-workflow= is the
+trigger window for "about to do something git-adjacent or
+deploy-adjacent".
+
+Why splitting this out (rather than rolling it into one omnibus skill)
+is justified in [[file:research.org][research.org]]; cross-cutting conventions live in
+[[file:suite-conventions.org][suite-conventions.org]].
+
+* Proposal
+
+** Trigger condition
+
+About to perform:
+
+- A git operation (commit, push, pull, rebase, merge, force-push,
+  cherry-pick, stash)
+- Opening, reviewing, or merging a PR / MR
+- Releasing or deploying
+
+Note the partition with =my-style=: =my-workflow= covers *how* a
+change is handled; =my-style= covers *what* the change's text says.
+
+** Trigger keywords
+
+(From the cross-suite matrix in [[file:suite-conventions.org][suite-conventions.org]].)
+
+=git=, =PR=, =merge=, =deploy=, =review=, =rebase=, =force-push=
+
+** Frontmatter (draft)
+
+#+begin_src yaml
+  ---
+  name: my-workflow
+  description: >-
+    The user's git, review, and deployment workflow on this machine.
+    Load before any version-control action (commit / push / merge /
+    rebase / force-push), opening or reviewing a PR, or running a
+    deploy.
+  ---
+#+end_src
+
+** Body sections (draft)
+
+#+begin_example
+  # My Workflow
+
+  > Replace each section with concrete, short facts. Delete sections
+  > you don't care about; empty sections waste context tokens.
+
+  ## Branching / commits
+  <!-- e.g. "trunk-based; rebase on top of main; no merge commits in feature branches." -->
+
+  ## PR opening / review
+  <!-- e.g. "Open as draft; self-review first; tag reviewers only after CI green." -->
+
+  ## Merging / rebasing / force-push
+  <!-- e.g. "Squash-and-merge via GitHub; force-push allowed only on own branches." -->
+
+  ## Releases / deploys
+  <!-- e.g. "Tag with `vX.Y.Z`; deploy via `just release`; no manual steps on prod." -->
+#+end_example
+
+** Partition with sibling skills (what this does *not* cover)
+
+- Machine / shell context → see [[file:my-env.org][my-env.org]].
+- Tool / package / build choices → see [[file:my-tools.org][my-tools.org]].
+- Commit / PR *wording* → see [[file:my-style.org][my-style.org]].
+
+* Design Details
+
+** Skill-specific open questions
+
+1. *Deploy / release scope.* Some users have elaborate deploy
+   pipelines that warrant their own skill (=my-deploy=). Lean keep
+   here for v0.1; revisit if real templates outgrow the section.
+2. *Code-review section.* Currently combined with PR opening; could
+   be split if review preferences (granularity, response cadence)
+   prove distinct from authoring preferences.
+
+* History
+
+- 2026-04-24: Created when the suite proposal was split into per-skill
+  docs.
+- 2026-04-24: Restructured to follow the project Air-doc template
+  (Summary / Motivation / Proposal / Design Details / History).
+- 2026-04-28: Implemented. Template content shipped at
+  =skills/my-workflow/SKILL.md=, packaged as
+  =nix/packages/my-workflow/=. Validated by
+  =nix/checks/user-context-skills.nix=. State → complete.
