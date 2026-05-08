@@ -41,6 +41,38 @@ Every agent you spawn must have a clear, non-overlapping file scope. Two agents 
 
 If tasks genuinely share files, serialise them — Agent B starts after Agent A merges.
 
+### Isolate Each Worker's Working Copy
+
+Delegation is only useful if you can review the result. A worker that
+edits files in your dirty working copy produces a diff tangled with
+your own in-flight changes — review becomes archaeology.
+
+Before spawning, give every worker an isolated working directory:
+
+- **`jj workspace add ../<repo>-<worker>`** — preferred in `jj` repos.
+  Separate working copy, shared underlying repo; you keep editing in
+  `default`, the worker edits in its own workspace, and you review
+  with `jj diff -r <worker-change>` from either side. Tear down with
+  `jj workspace forget` when the task is done.
+- **`git worktree add ../<repo>-<worker> -b agent/<worker>`** — same
+  shape for plain git repos.
+- **A dedicated branch and a fresh `jj new` / `git checkout -b`** —
+  acceptable for small, surgical changes, but only when your `@` is
+  clean. Otherwise commit or stash your WIP first.
+
+In the prompt, name the workspace path explicitly, pass it as the
+worker's `cwd`, and tell the worker to leave its result as one (or a
+few) self-contained commits with a clear message. The success
+criteria should reference *the commit*, not just files on disk —
+"`jj diff -r <change>` shows only `src/foo.rs` and a new test, build
+is green, message follows convention". That is the review surface
+you will inspect, so make it small and explicit.
+
+If a worker reports done with smeared changes across a dirty parent
+working copy, do not try to unpick it yourself — spawn a focused
+cleanup agent: "split the working-copy changes so the in-scope files
+are one commit and everything else is a separate change."
+
 ### Write Prompts That Set Agents Up for Success
 
 Each agent prompt must be **self-contained** — agents can't see your conversation or other agents' work. Include:
@@ -51,7 +83,8 @@ Each agent prompt must be **self-contained** — agents can't see your conversat
 - **Files in scope** — which files/directories the agent should modify
 - **Files to read but not modify** — context files the agent needs to understand
 - **Success criteria** — how the agent knows it's done (tests pass, builds clean, specific behaviour works)
-- **Commit instructions** — how to commit and what message format to use
+- **Working copy / branch** — the isolated path the agent should `cd` into (e.g. `../my-app-auth-worker` from a `jj workspace add`) and, where relevant, the branch / change name to land work on. Never default to "the current repo" if your own `@` is dirty.
+- **Commit instructions** — how to commit, what message format to use, and an explicit "land the result as one (or a few) self-contained commits so review is `jj diff -r <change>`".
 - **Review artifact path** — if the agent produces review artifacts (QA reports, code reviews, security audits), specify a dedicated reviews directory (e.g., `reviews/` or `/tmp/reviews/`). Artifacts must NOT be written to the source repo root — they pollute the working tree and risk being committed with production code.
 - **Session learnings** — before killing an agent, ask it to write a brief summary of what it learned (gotchas, patterns that worked, things it would do differently). Collect these into a shared learnings document (e.g., `reviews/session-learnings.md`) so the next orchestrator run can update context files with hard-won knowledge.
 
