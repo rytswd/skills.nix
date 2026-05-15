@@ -52,6 +52,7 @@ Chronoa sessions, Ever hooks, and Pi model selection.
 * History
 - 2026-05-15: Created Air doc and marked work-in-progress for coordinated team-play review.
 - 2026-05-15: Completed two independent reviewer passes and synthesized their findings.
+- 2026-05-15: Implemented Wave 1 team-play documentation polish: load hints, placeholder guidance, reviewer fixes, and security confidence rubric.
 
 * References
 - User request in =/tmp/skillsnix-supervisor-teamplay-review.md=.

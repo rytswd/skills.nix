@@ -97,7 +97,7 @@ These are **reference templates, not drop-in system prompts**. Each role doc cap
 In a workmux prompt or agent setup:
 
 ```
-Read team-play/reviewer/zig.md as reference for review standards.
+Read reviewer/zig.md as reference for review standards.
 Apply those standards to the code in src/ — adapt the criteria
 to this project's build system and conventions.
 ```
@@ -105,17 +105,18 @@ to this project's build system and conventions.
 Or compose roles:
 
 ```
-Read team-play/engineer/rust.md and team-play/security/code-audit.md.
+Read engineer/rust.md and security/code-audit.md.
 You are an engineer who writes secure-by-default code. Use the
 engineer standards for code quality, and the security audit criteria
 as your self-review checklist for every function that handles input.
+When security findings are involved, the security role's severity/proof rubric takes precedence over language-specific style guidance.
 ```
 
 ### Adapting to a project
 
 When generating a project-specific role prompt from these references:
 
-1. **Fill in the Project Context section** — every role file has a placeholder section for project-specific details (files to read, build commands, conventions)
+1. **Fill in the Project Context section** — every role file has a placeholder section for project-specific details (files to read, build commands, conventions). If any placeholder remains bracketed or unknown, stop and ask for the missing context (or fill it from repository docs) before proceeding.
 2. **Adjust thresholds** — function length limits, test count expectations, performance budgets
 3. **Set output targets** — where to write findings, commit message format, branch strategy
 4. **Drop irrelevant sections** — a CLI project doesn't need the async/SSR criteria from Svelte
