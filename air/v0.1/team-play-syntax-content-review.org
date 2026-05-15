@@ -1,5 +1,5 @@
 #+title: Team-play syntax and content review
-#+state: work-in-progress
+#+state: complete
 #+FILETAGS: :review:team-play:
 
 * Summary
