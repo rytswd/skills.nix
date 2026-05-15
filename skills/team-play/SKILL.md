@@ -39,6 +39,8 @@ Code review specialists. They read code, identify issues, and produce structured
 | `zig.md` | Zig idioms, memory safety, error sets, allocator discipline |
 | `rust.md` | Ownership, lifetimes, error handling, trait design, unsafe audit |
 | `go.md` | Error handling, goroutine safety, interface design, stdlib usage |
+| `javascript.md` | JavaScript/TypeScript runtime boundaries, async behavior, type safety, package tooling |
+| `python.md` | Python idioms, typing, packaging, async/runtime behavior, data workflows |
 | `svelte.md` | Reactivity, component structure, accessibility, Svelte 5 runes |
 
 ### `engineer/`
