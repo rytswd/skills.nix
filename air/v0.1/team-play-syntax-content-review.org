@@ -1,0 +1,58 @@
+#+title: Team-play syntax and content review
+#+state: work-in-progress
+#+FILETAGS: :review:team-play:
+
+* Summary
+Coordinate an independent review of the =team-play= skill's syntax, structure, role prompt usability, and language-specific reviewer coverage.
+
+* Motivation
+The =team-play= skill is a reusable role-prompt catalog. Syntax drift, inconsistent role structure, or missing language-specific reviewer docs can reduce usability for downstream agents.
+
+** Goals
+- Review overall =team-play= syntax and conventions across the skill.
+- Assess whether role prompts are consistently structured and immediately usable.
+- Identify gaps or inconsistencies in language-specific reviewer docs.
+- Produce concrete recommendations or implementation plans for JavaScript and Python docs.
+- Use two independent reviewer agents and synthesize their outputs before implementation.
+
+** Non-Goals
+- Implement JavaScript or Python docs in this review phase.
+- Rewrite the whole =team-play= skill without follow-up approval.
+- Modify source skill files during the review phase.
+
+* Proposal
+Spawn two independent reviewer agents via Chronoa:
+- GPT reviewer: broad syntax/conventions and cross-skill structure review.
+- Opus reviewer: role usability and language-specific reviewer gap analysis.
+
+Both reviewers must include concrete recommendations for JavaScript and Python language-specific docs. Reviewers should not modify the repository; they do not need dedicated workspaces when operating read-only. The supervisor will synthesize findings after Ever completion events arrive.
+
+* Design Details
+- Supervisor session: =skillsnix-supervisor=.
+- Air doc: =air/v0.1/team-play-syntax-content-review.org=.
+- Completion topics:
+  - =skillsnix.review.teamplay-gpt55.done=
+  - =skillsnix.review.teamplay-opus47.done=
+- Review scopes are intentionally non-overlapping.
+
+** Test Plan
+- Reviewers inspect the skill tree and report findings.
+- Reviewers publish Ever completion events including status and summary context.
+- Supervisor synthesizes findings from both reviewers and proposes next steps.
+
+* Drawbacks
+Two independent reviews may duplicate observations, but redundancy is useful for content-quality review.
+
+* Alternatives
+A single reviewer would be faster but less independent. Direct supervisor review is avoided to preserve orchestration-only mode.
+
+* Infrastructure Needed
+Chronoa sessions, Ever hooks, and Pi model selection.
+
+* History
+- 2026-05-15: Created Air doc and marked work-in-progress for coordinated team-play review.
+- 2026-05-15: Completed two independent reviewer passes and synthesized their findings.
+
+* References
+- User request in =/tmp/skillsnix-supervisor-teamplay-review.md=.
+- =/home/ryota/.agents/skills/team-play/SKILL.md=.
