@@ -52,6 +52,8 @@ Implementation specialists. They write production code to a self-review standard
 | `zig.md` | Systems-level Zig — modules, tests, allocator hygiene, build.zig |
 | `rust.md` | Idiomatic Rust — ownership-first design, error types, async patterns |
 | `go.md` | Production Go — error wrapping, context propagation, testable design |
+| `javascript.md` | JavaScript/TypeScript — runtime/module boundaries, type safety, async discipline, framework-aware implementation |
+| `python.md` | Production Python — typing at boundaries, async/resource discipline, packaging, idiomatic stdlib usage |
 | `svelte.md` | Svelte 5 — runes, components, SSR, SvelteKit patterns |
 
 ### `security/`

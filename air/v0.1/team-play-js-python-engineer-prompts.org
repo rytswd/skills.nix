@@ -1,0 +1,54 @@
+#+title: Team-play JavaScript and Python engineer prompts
+#+state: complete
+#+FILETAGS: :team-play:implementation:
+
+* Summary
+Add JavaScript/TypeScript and Python engineer role prompts to complement the existing reviewer prompts.
+
+* Motivation
+The =team-play= skill includes JavaScript/TypeScript and Python reviewer prompts, but the engineer role table still lacks matching implementation prompts for those ecosystems.
+
+** Goals
+- Use two independent implementation agents concurrently: one GPT-5.5, one Opus 4.7.
+- Both agents produce complete JavaScript/TypeScript and Python engineer prompt implementations in separate workspaces.
+- Agents may use Kagi search for current ecosystem best practices.
+- Supervisor reviews both outputs and integrates the best combined result.
+- Update =skills/team-play/SKILL.md= to list the new engineer prompts.
+
+** Non-Goals
+- Refactor shared role bases.
+- Add more languages beyond JavaScript/TypeScript and Python.
+
+* Proposal
+Spawn two agents concurrently against isolated workspaces:
+- GPT implementation agent using =openai-codex/gpt-5.5=.
+- Opus implementation agent using =anthropic/claude-opus-4-7=.
+
+Each agent should create both =skills/team-play/engineer/javascript.md= and =skills/team-play/engineer/python.md=, update =skills/team-play/SKILL.md=, and optionally use Kagi search to verify modern ecosystem guidance. The supervisor will review both implementations and integrate the preferred result or synthesize a final version.
+
+* Design Details
+New prompts should follow existing =engineer/*.md= structure: reference template note, load hint, project context, implementation standards, self-review/verification guidance, red flags, and root-cause framing.
+
+** Test Plan
+- Review both independent diffs.
+- Ensure =SKILL.md= indexes both new engineer prompts.
+- Run =nix flake check --no-build= after integration.
+
+* Drawbacks
+Parallel complete implementations create overlap and require synthesis, but model diversity should improve final prompt quality.
+
+* Alternatives
+Single-agent implementation was attempted and discarded because the user explicitly requested concurrent GPT and Opus work.
+
+* Infrastructure Needed
+Chronoa worker sessions, Ever completion hooks, Pi model selection, and optional Kagi API/search skill use inside agents.
+
+* History
+- 2026-05-15: Restarted engineer-prompt implementation from scratch with concurrent GPT and Opus agents.
+- 2026-05-16: Opus worker (=skillsnix-teamplay-eng-opus=) drafted =skills/team-play/engineer/javascript.md= and =skills/team-play/engineer/python.md=, updated SKILL.md engineer table; =nix flake check --no-build= passes.
+
+* References
+- =air/v0.1/team-play-syntax-content-review.org=
+- =skills/team-play/engineer/=
+- =skills/team-play/reviewer/javascript.md=
+- =skills/team-play/reviewer/python.md=
