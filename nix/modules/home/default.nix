@@ -92,19 +92,26 @@ in
     # so that edits to the underlying files are reflected immediately and
     # user-deleted entries are restored on the next activation.
     #
-    # A pre-flight validation runs before `writeBoundary` so any bad
-    # configuration aborts the switch *before* any file mutation occurs.
+    # A pre-flight validation runs *after* `writeBoundary` (so that
+    # home-manager has linked dotfiles like ~/.ssh/config) and after any
+    # repo-cloning activation steps (e.g. home-git-clone's `gitClone-*` /
+    # `jjClone-*`, which also run `entryAfter writeBoundary` and sort before
+    # `localSkills-*` lexically). This lets `localSkills` that point at
+    # cloned working copies validate once those clones exist, instead of
+    # aborting the switch on a cold start before the repos are present.
+    # The per-agent install steps depend on the preflight so a bad
+    # configuration still aborts before any symlinks are written.
     home.activation = lib.mkMerge (
       [
         (lib.mkIf (cfg.localSkills != { }) {
-          localSkills-preflight = lib.hm.dag.entryBefore [ "writeBoundary" ] (
+          localSkills-preflight = lib.hm.dag.entryAfter [ "writeBoundary" ] (
             mkLocalSkillsPreflight { inherit pkgs; localSkills = cfg.localSkills; }
           );
         })
       ]
       ++ lib.mapAttrsToList (name: agent:
         lib.mkIf (cfg.${name}.enable && cfg.localSkills != { }) {
-          "localSkills-${name}" = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+          "localSkills-${name}" = lib.hm.dag.entryAfter [ "writeBoundary" "localSkills-preflight" ] (
             mkLocalSkillsActivation {
               inherit pkgs;
               agentRoot = "${config.home.homeDirectory}/${agent.path}";
